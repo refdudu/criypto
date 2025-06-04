@@ -16,11 +16,11 @@ const getClosePriceHistoryForRSI = () => {
       return [];
     });
 };
-const setEmaHistory = async (data: number[]) => {
-  return writeFile("./emaHistory.json", JSON.stringify(data)).then(() =>
-    console.log("setEmaHistory")
-  );
-};
+// const setEmaHistory = async (data: number[]) => {
+//   return writeFile("./emaHistory.json", JSON.stringify(data)).then(() =>
+//     console.log("setEmaHistory")
+//   );
+// };
 const addEmaHistory = async (data: number) => {
   const existingData = await getEmaHistory();
   const newData = [...existingData, data];
