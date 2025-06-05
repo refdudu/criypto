@@ -53,4 +53,4 @@ async function saveSymbolDataToFirebase( // RENOMEADO e MODIFICADO
   }
 }
 
-export const CoinRepository = {};
+export const CoinRepository = {loadSymbolDataFromFirebase, saveSymbolDataToFirebase};
