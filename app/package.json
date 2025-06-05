@@ -9,10 +9,11 @@
     "typescript": "^5.8.3"
   },
   "scripts": {
-    "dev":"tsx --watch app.ts"
+    "dev": "tsx --watch app.ts"
   },
   "dependencies": {
     "dotenv": "^16.5.0",
+    "firebase": "^11.8.1",
     "node-binance-api": "^1.0.10"
   }
 }
