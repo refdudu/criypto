@@ -1,0 +1,26 @@
+{
+  "1m": {
+    "emaHistory": [
+      10.007
+    ],
+    "rsiClosePrices": [
+      10.007
+    ]
+  },
+  "5m": {
+    "emaHistory": [],
+    "rsiClosePrices": []
+  },
+  "15m": {
+    "emaHistory": [],
+    "rsiClosePrices": []
+  },
+  "1h": {
+    "emaHistory": [],
+    "rsiClosePrices": []
+  },
+  "4h": {
+    "emaHistory": [],
+    "rsiClosePrices": []
+  }
+}
