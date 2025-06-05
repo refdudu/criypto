@@ -39,9 +39,11 @@ export interface SymbolTimeframeIndicatorState {
 
 // Estado geral da estratégia para um SÍMBOLO
 export interface SymbolOverallStrategyState {
-  isPrimedFor5mEntry: boolean;
+  majorRallyActive: boolean;
   rallyReferencePrice: number | null;
-  rallyPeakPriceSincePrimed: number | null;
-  // Adicionado para saber qual timeframe detectou o rally, para logging
+  rallyPeakPriceSinceActive: number | null;
   rallyDetectedOnTimeframe: string | null;
+  oversoldTriggerUsedForTimeframe: {
+    [timeframe: string]: boolean;
+  };
 }

@@ -18,9 +18,9 @@ const config = {
   
   strategy: {
     rallyDetectionTimeframes: ["15m", "1h", "4h"],
-    entryTimeframe: "5m",
-    rallyLookbackPeriods: 48, 
-    rallyMinPercentIncrease: 20, 
+    entryTimeframesInSequence: ["5m", "15m", "1h"],
+    rallyLookbackPeriods: 48,
+    rallyMinPercentIncrease: 20,
     rallyPrimedInvalidationDropPercent: 10,
     rsiOversoldThreshold: 30,
   },
@@ -33,7 +33,7 @@ const config = {
 const indicatorStates: Record<string, Record<string, SymbolTimeframeIndicatorState>> = {};
 const symbolStrategyStates: Record<string, SymbolOverallStrategyState> = {};
 
-// --- Funções de Persistência de Dados (Um arquivo por símbolo) ---
+// --- Funções de Persistência de Dados ---
 async function loadSymbolDataFromFile(symbol: string): Promise<Record<string, { emaHistory: number[], rsiClosePrices: number[] }>> {
   const fileName = `./${symbol}_marketData.json`;
   try {
@@ -66,32 +66,49 @@ async function saveSymbolDataToFile(symbol: string, allTimeframesDataForSymbol: 
   }
 }
 
+// Interface local para os dados esperados de ticker de binance.prevDay()
+interface BinanceDailyStat {
+  symbol: string;
+  priceChangePercent: string;
+  quoteVolume: string;
+  // Adicione outros campos do ticker se necessário
+}
+
 // --- Função para Buscar Top Gainers ---
 async function getTopGainersFromBinance(
     binance: Binance, topN: number, quoteAsset: string, minVolume: number
 ): Promise<string[]> {
   console.log(`Buscando top ${topN} gainers (24h), quote: ${quoteAsset}, vol > ${minVolume}...`);
   try {
-    const tickers: any[] = await binance.prevDay(false);
-    if (!Array.isArray(tickers)) {
-        console.error("Erro: prevDay não retornou array. Dados:", tickers);
-        return config.dynamicSymbols.fallbackSymbols;
+    const tickersResponse = await binance.prevDay(false); // Passar false para todos os símbolos
+    
+    const tickersArray: BinanceDailyStat[] = Array.isArray(tickersResponse) 
+        ? tickersResponse 
+        : (tickersResponse ? [tickersResponse as any] : []); // Assegura que é um array
+
+    if (tickersArray.length === 0 && !Array.isArray(tickersResponse) && tickersResponse) {
+         console.warn("prevDay retornou um objeto único, não um array. Resposta:", tickersResponse);
     }
-    const filteredAndSorted = tickers
-      .filter(t => 
-        typeof t.symbol === 'string' && t.symbol.endsWith(quoteAsset) &&
-        t.quoteVolume && parseFloat(t.quoteVolume) > minVolume &&
-        typeof t.priceChangePercent !== 'undefined' 
+    
+    const filteredAndSorted = tickersArray
+      .filter(ticker => 
+        typeof ticker.symbol === 'string' && ticker.symbol.endsWith(quoteAsset) &&
+        ticker.quoteVolume && parseFloat(ticker.quoteVolume) > minVolume &&
+        typeof ticker.priceChangePercent !== 'undefined' 
       )
-      .map(t => ({ symbol: t.symbol, priceChangePercent: parseFloat(t.priceChangePercent) }))
+      .map(ticker => ({
+        symbol: ticker.symbol,
+        priceChangePercent: parseFloat(ticker.priceChangePercent),
+      }))
       .sort((a, b) => b.priceChangePercent - a.priceChangePercent);
 
     const topGainers = filteredAndSorted.slice(0, topN).map(t => t.symbol);
+
     if (topGainers.length === 0) {
-        console.warn(`Nenhum gainer encontrado. Usando fallback: ${config.dynamicSymbols.fallbackSymbols.join(', ')}`);
+        console.warn(`Nenhum gainer encontrado com os critérios. Usando fallback: ${config.dynamicSymbols.fallbackSymbols.join(', ')}`);
         return config.dynamicSymbols.fallbackSymbols;
     }
-    console.log(`Top ${topN} gainers (24h) selecionados:`, topGainers);
+    console.log(`Top ${topN} gainers (24h) selecionados:`, topGainers.join(', '));
     return topGainers;
   } catch (error) {
     console.error("Erro ao buscar top gainers:", error);
@@ -113,11 +130,11 @@ const main = async () => {
     );
   } else {
     symbolsToMonitor = config.dynamicSymbols.fallbackSymbols;
-    console.log("Monitoramento dinâmico desabilitado. Usando fallback:", symbolsToMonitor);
+    console.log("Monitoramento dinâmico desabilitado. Usando fallback:", symbolsToMonitor.join(', '));
   }
   
   if (!symbolsToMonitor || symbolsToMonitor.length === 0) {
-    console.error("ERRO: Nenhum símbolo para monitorar. Encerrando."); return;
+    console.error("ERRO CRÍTICO: Nenhum símbolo para monitorar. Encerrando."); return;
   }
   console.log("SÍMBOLOS MONITORADOS NESTA SESSÃO:", symbolsToMonitor.join(', '));
 
@@ -133,9 +150,14 @@ const main = async () => {
         closedKlineCountForEMA: (intervalData.emaHistory || []).length,
       };
     }
+    const initialOversoldTriggers: { [timeframe: string]: boolean } = {};
+    config.strategy.entryTimeframesInSequence.forEach(tf => {
+      initialOversoldTriggers[tf] = false;
+    });
     symbolStrategyStates[symbol] = {
-      isPrimedFor5mEntry: false, rallyReferencePrice: null,
-      rallyPeakPriceSincePrimed: null, rallyDetectedOnTimeframe: null,
+      majorRallyActive: false, rallyReferencePrice: null,
+      rallyPeakPriceSinceActive: null, rallyDetectedOnTimeframe: null,
+      oversoldTriggerUsedForTimeframe: initialOversoldTriggers,
     };
     console.log(`[Setup] Estados para ${symbol} inicializados.`);
   }
@@ -150,7 +172,7 @@ const main = async () => {
   if (streams.length === 0) { console.error("Nenhum stream para inscrever. Encerrando."); return; }
   console.log(`Iniciando monitoramento para ${streams.length} streams (ex: ${streams.slice(0,3).join(", ")}...).`);
 
-  // @ts-ignore TS2345
+  // @ts-ignore TS2345 - Definição de tipos para subscribeCombined pode estar incorreta na lib.
   binance.websockets.subscribeCombined(streams, (klineEventData: KlineEvent) => {
     if (symbolsToMonitor.includes(klineEventData.s)) {
         handleKlineDataWithIndicators(klineEventData).catch(e => console.error(`Erro em handleKlineData [${klineEventData.s}@${klineEventData.k.i}]: ${e}`, e.stack));
@@ -190,7 +212,7 @@ const handleKlineDataWithIndicators = async (klinePayload: KlineEvent): Promise<
   }
   tfState.emaHistory.push(currentEMA);
   if (tfState.emaHistory.length > config.historySaveLimit) tfState.emaHistory.shift();
-  // Log da EMA será feito junto com o RSI ou após a verificação de dados suficientes para RSI
+  // Log da EMA é feito abaixo, junto com o RSI
 
   // --- CÁLCULO DE RSI ---
   tfState.allClosePriceHistoryForRSI.push(closePrice);
@@ -210,7 +232,7 @@ const handleKlineDataWithIndicators = async (klinePayload: KlineEvent): Promise<
     let avgGain: number, avgLoss: number;
 
     if (tfState.previousAverageGain === null || tfState.previousAverageLoss === null || 
-        (relevantPrices.length === (config.rsiPeriod + 1) && priceChanges.length === config.rsiPeriod) // Garante SMA no primeiro cálculo completo
+        (relevantPrices.length === (config.rsiPeriod + 1) && priceChanges.length === config.rsiPeriod)
        ) {
         avgGain = gains.reduce((s, v) => s + v, 0) / config.rsiPeriod;
         avgLoss = losses.reduce((s, v) => s + v, 0) / config.rsiPeriod;
@@ -230,63 +252,77 @@ const handleKlineDataWithIndicators = async (klinePayload: KlineEvent): Promise<
     console.log(`[${eventSymbol}@${interval}] RSI(${config.rsiPeriod}): ${tfState.rsiValue.toFixed(2)}`);
   }
   
-  // Salva os históricos de EMA e RSI (preços) após cada atualização
+  // Salva os históricos de EMA e RSI (preços) após cada atualização de indicadores
   await saveSymbolDataToFile(eventSymbol, indicatorStates[eventSymbol]);
 
   // --- LÓGICA DA ESTRATÉGIA ---
   // Parte 1: DETECÇÃO/GERENCIAMENTO DA "GRANDE VALORIZAÇÃO" (Macro Rally)
   if (config.strategy.rallyDetectionTimeframes.includes(interval)) {
-    if (!stratState.isPrimedFor5mEntry) {
+    if (!stratState.majorRallyActive) { 
       if (tfState.allClosePriceHistoryForRSI.length >= config.strategy.rallyLookbackPeriods) {
         const lookbackPrices = tfState.allClosePriceHistoryForRSI.slice(-config.strategy.rallyLookbackPeriods);
         const lowWatermark = Math.min(...lookbackPrices);
         if (closePrice > lowWatermark * (1 + config.strategy.rallyMinPercentIncrease / 100)) {
-          stratState.isPrimedFor5mEntry = true;
+          stratState.majorRallyActive = true;
           stratState.rallyReferencePrice = lowWatermark;
-          stratState.rallyPeakPriceSincePrimed = closePrice;
+          stratState.rallyPeakPriceSinceActive = closePrice;
           stratState.rallyDetectedOnTimeframe = interval;
-          console.log(`\x1b[36m\x1b[1m[${eventSymbol}] SÍMBOLO ARMADO! Valorização de ${( (closePrice - lowWatermark) / lowWatermark * 100).toFixed(2)}% detectada em ${interval} (fundo ref.: ${lowWatermark.toFixed(2)}). Aguardando RSI de ${config.strategy.entryTimeframe}.\x1b[0m`);
+          // Reseta os gatilhos usados para o novo rally
+          config.strategy.entryTimeframesInSequence.forEach(tf => {
+            stratState.oversoldTriggerUsedForTimeframe[tf] = false;
+          });
+          console.log(`\x1b[36m\x1b[1m[${eventSymbol}] SÍMBOLO ARMADO! Valorização de ${( (closePrice - lowWatermark) / lowWatermark * 100).toFixed(2)}% detectada em ${interval} (fundo ref.: ${lowWatermark.toFixed(2)}). Aguardando RSI em ${config.strategy.entryTimeframesInSequence.join('/')}.\x1b[0m`);
         }
       }
-    } else { // Símbolo já está "armado" (isPrimedFor5mEntry === true)
-      // Atualiza o pico se o preço no timeframe de detecção atual for maior
-      if (closePrice > (stratState.rallyPeakPriceSincePrimed || 0) ) {
-         stratState.rallyPeakPriceSincePrimed = closePrice;
-         // console.log(`\x1b[36m[${eventSymbol}] Pico da valorização (armado) atualizado para ${closePrice.toFixed(2)} via ${interval}.\x1b[0m`);
+    } else { // Macro Rally JÁ ESTÁ ATIVO
+      if (closePrice > (stratState.rallyPeakPriceSinceActive || 0) ) {
+         stratState.rallyPeakPriceSinceActive = closePrice;
       }
-      // Verifica invalidação do estado "armado"
-      if (stratState.rallyPeakPriceSincePrimed && closePrice < stratState.rallyPeakPriceSincePrimed * (1 - config.strategy.rallyPrimedInvalidationDropPercent / 100)) {
-        console.log(`\x1b[31m[${eventSymbol}] SÍMBOLO DESARMADO. Preço (${closePrice.toFixed(2)} @ ${interval}) caiu de ${stratState.rallyPeakPriceSincePrimed.toFixed(2)} (pico desde armado).\x1b[0m`);
-        stratState.isPrimedFor5mEntry = false;
+      if (stratState.rallyPeakPriceSinceActive && closePrice < stratState.rallyPeakPriceSinceActive * (1 - config.strategy.rallyPrimedInvalidationDropPercent / 100)) {
+        console.log(`\x1b[31m[${eventSymbol}] SÍMBOLO DESARMADO (Macro Rally Encerrado). Preço (${closePrice.toFixed(2)} @ ${interval}) caiu de ${stratState.rallyPeakPriceSinceActive.toFixed(2)} (pico desde armado).\x1b[0m`);
+        stratState.majorRallyActive = false;
         stratState.rallyReferencePrice = null;
-        stratState.rallyPeakPriceSincePrimed = null;
+        stratState.rallyPeakPriceSinceActive = null;
         stratState.rallyDetectedOnTimeframe = null;
       }
     }
   }
 
-  // Parte 2: GATILHO DE ENTRADA (ocorre APENAS no 'entryTimeframe')
-  if (interval === config.strategy.entryTimeframe) {
-    if (stratState.isPrimedFor5mEntry && 
+  // Parte 2: GATILHO DE ENTRADA SEQUENCIAL (ocorre nos 'entryTimeframesInSequence')
+  if (config.strategy.entryTimeframesInSequence.includes(interval)) {
+    if (stratState.majorRallyActive && 
+        !stratState.oversoldTriggerUsedForTimeframe[interval] && 
         tfState.rsiValue !== null && 
         tfState.rsiValue < config.strategy.rsiOversoldThreshold) {
-      console.warn(`\x1b[33m\x1b[1m>>> GATILHO DE ENTRADA [${eventSymbol}@${interval}]: RSI (${tfState.rsiValue.toFixed(2)}) em sobrevenda APÓS VALORIZAÇÃO (detectada em ${stratState.rallyDetectedOnTimeframe}, pico armado ${stratState.rallyPeakPriceSincePrimed?.toFixed(2)}). COMPRAR!\x1b[0m`);
       
-      // Reseta o estado "armado" para garantir "primeira vez" após ESTA valorização
-      stratState.isPrimedFor5mEntry = false; 
-      stratState.rallyReferencePrice = null;
-      stratState.rallyPeakPriceSincePrimed = null;
-      stratState.rallyDetectedOnTimeframe = null;
-      
-      // TODO: Implementar lógica de execução de ordem de compra aqui
-      // Ex: try {
-      //   const quantityToBuy = 0.01; // Defina a quantidade
-      //   console.log(`Tentando comprar ${quantityToBuy} de ${eventSymbol}...`);
-      //   const orderResult = await binance.marketBuy(eventSymbol, quantityToBuy);
-      //   console.log(`Ordem de COMPRA para ${eventSymbol} executada:`, orderResult);
-      // } catch (e) {
-      //   console.error(`ERRO AO EXECUTAR ORDEM DE COMPRA para ${eventSymbol}:`, e);
-      // }
+      let canTriggerThisTimeframe = true;
+      const currentIndex = config.strategy.entryTimeframesInSequence.indexOf(interval);
+      for (let i = 0; i < currentIndex; i++) { // Verifica se TFs ANTERIORES na sequência já foram usados
+        const precedingTf = config.strategy.entryTimeframesInSequence[i];
+        if (!stratState.oversoldTriggerUsedForTimeframe[precedingTf]) {
+          canTriggerThisTimeframe = false; 
+          break;
+        }
+      }
+
+      if (canTriggerThisTimeframe) {
+        console.warn(`\x1b[33m\x1b[1m>>> GATILHO DE ENTRADA [${eventSymbol}@${interval}]: RSI (${tfState.rsiValue.toFixed(2)}) em sobrevenda APÓS VALORIZAÇÃO (detectada em ${stratState.rallyDetectedOnTimeframe}, pico armado ${stratState.rallyPeakPriceSinceActive?.toFixed(2)}). COMPRAR!\x1b[0m`);
+        
+        stratState.oversoldTriggerUsedForTimeframe[interval] = true; 
+        
+        const allEntryTfsUsed = config.strategy.entryTimeframesInSequence.every(
+          tf => stratState.oversoldTriggerUsedForTimeframe[tf]
+        );
+
+        if (allEntryTfsUsed) {
+          console.log(`\x1b[35m[${eventSymbol}] Todas as oportunidades de entrada (${config.strategy.entryTimeframesInSequence.join('/')}) para o rally atual foram utilizadas. Desarmando o símbolo para este rally.\x1b[0m`);
+          stratState.majorRallyActive = false; 
+          stratState.rallyReferencePrice = null;
+          stratState.rallyPeakPriceSinceActive = null;
+          stratState.rallyDetectedOnTimeframe = null;
+        }
+        // TODO: Lógica de compra real aqui (binance.marketBuy(...))
+      }
     }
   }
 }; // Fim de handleKlineDataWithIndicators
