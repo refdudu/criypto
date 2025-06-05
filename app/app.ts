@@ -80,7 +80,7 @@ async function getTopGainersFromBinance(
 ): Promise<string[]> {
   console.log(`Buscando top ${topN} gainers (24h), quote: ${quoteAsset}, vol > ${minVolume}...`);
   try {
-    const tickersResponse = await binance.prevDay(false); // Passar false para todos os símbolos
+    const tickersResponse = await binance.prevDay(); // Passar false para todos os símbolos
     
     const tickersArray: BinanceDailyStat[] = Array.isArray(tickersResponse) 
         ? tickersResponse 
@@ -158,6 +158,8 @@ const main = async () => {
       majorRallyActive: false, rallyReferencePrice: null,
       rallyPeakPriceSinceActive: null, rallyDetectedOnTimeframe: null,
       oversoldTriggerUsedForTimeframe: initialOversoldTriggers,
+      isPrimedFor5mEntry: null,
+      rallyPeakPriceSincePrimed: null
     };
     console.log(`[Setup] Estados para ${symbol} inicializados.`);
   }
