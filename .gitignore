@@ -1,4 +1,5 @@
 .env
 node_modules
-web
+# web
+.env.development
 yarn.lock

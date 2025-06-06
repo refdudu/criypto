@@ -1,56 +1,154 @@
-import { child, ref, set, get } from "firebase/database";
-import { database } from "./firebase";
+import { firestore } from "./firebase";
 import { SymbolTimeframeIndicatorState } from "./interfaces";
-import { config } from "./app";
+import { config } from "./app"; // Usado para historySaveLimit
+import {
+  addDoc,
+  arrayUnion,
+  collection,
+  doc,
+  getDoc,
+  setDoc,
+  updateDoc,
+} from "firebase/firestore";
 
-// --- Funções de Persistência de Dados (Firebase) ---
-async function loadSymbolDataFromFirebase( // RENOMEADO e MODIFICADO
-  symbol: string
-): Promise<Record<string, { emaHistory: number[]; rsiClosePrices: number[] }>> {
-  const dbRef = ref(database);
+// Interface para os dados do kline a serem salvos no histórico detalhado
+export interface HistoricalKlineData {
+  emaValue: number;
+  rsiValue: number | null;
+  closePrice: number;
+  openPrice: number;
+  highPrice: number;
+  lowPrice: number;
+  timestamp: string;
+}
+
+// Tipo para os dados carregados do estado do intervalo
+type LoadedIntervalState = {
+  emaHistory: number[];
+  rsiClosePrices: number[];
+  previousAverageGain: number | null;
+  previousAverageLoss: number | null;
+  closedKlineCountForEMA: number;
+} | null;
+
+async function loadSymbolIntervalDataFromFirebase(
+  symbol: string,
+  interval: string
+): Promise<LoadedIntervalState> {
+  const docRef = doc(firestore, "marketData", symbol, "intervals", interval);
   try {
-    const snapshot = await get(child(dbRef, `marketData/${symbol}`));
-    if (snapshot.exists()) {
-      console.log(`Dados para ${symbol} carregados do Firebase.`);
-      return snapshot.val() as Record<
-        string,
-        { emaHistory: number[]; rsiClosePrices: number[] }
-      >;
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+      console.log(
+        `Dados de indicadores para ${symbol}@${interval} carregados do Firestore.`
+      );
+      const data = docSnap.data();
+      return {
+        emaHistory: data.emaHistory || [],
+        rsiClosePrices: data.rsiClosePrices || [],
+        previousAverageGain:
+          data.previousAverageGain !== undefined
+            ? data.previousAverageGain
+            : null,
+        previousAverageLoss:
+          data.previousAverageLoss !== undefined
+            ? data.previousAverageLoss
+            : null,
+        closedKlineCountForEMA: data.closedKlineCountForEMA || 0,
+      };
     } else {
       console.log(
-        `Nenhum dado encontrado para ${symbol} no Firebase. Iniciando vazio.`
+        `Nenhum dado de indicadores encontrado para ${symbol}@${interval} no Firestore. Iniciando vazio.`
       );
-      return {};
+      return null;
     }
   } catch (error: any) {
-    console.error(`Erro ao ler dados para ${symbol} do Firebase:`, error);
-    return {}; // Retorna vazio em caso de erro para não quebrar a inicialização
+    console.error(
+      `Erro ao ler dados de indicadores para ${symbol}@${interval} do Firestore:`,
+      error
+    );
+    return null;
   }
 }
 
-async function saveSymbolDataToFirebase( // RENOMEADO e MODIFICADO
+async function saveSymbolIntervalDataToFirebase(
   symbol: string,
-  allTimeframesDataForSymbol: Record<string, SymbolTimeframeIndicatorState>
+  interval: string,
+  klineDataForHistory: HistoricalKlineData
 ): Promise<void> {
-  const dataToPersist: Record<
-    string,
-    { emaHistory: number[]; rsiClosePrices: number[] }
-  > = {};
-  for (const interval in allTimeframesDataForSymbol) {
-    const tfState = allTimeframesDataForSymbol[interval];
-    dataToPersist[interval] = {
-      emaHistory: tfState.emaHistory.slice(-config.historySaveLimit),
-      rsiClosePrices: tfState.allClosePriceHistoryForRSI.slice(
-        -config.historySaveLimit
-      ),
-    };
-  }
+  console.log("🚀 ~ interval:", interval);
+  const intervalStateDoc = doc(firestore, "marketData", symbol);
+  const intervalStateDocRef = collection(
+    firestore,
+    intervalStateDoc.path,
+    interval
+  );
+  //   const intervalStateDoc = await getDoc(intervalStateDocRef);
+  const { closePrice, emaValue, rsiValue } = klineDataForHistory;
+
   try {
-    await set(ref(database, `marketData/${symbol}`), dataToPersist);
-    // console.log(`Dados para ${symbol} salvos no Firebase.`); // Log opcional
+    const _doc = await getDoc(intervalStateDoc);
+    const _data = _doc.data();
+
+    let intervals: string[] = [];
+    if (_data) {
+      intervals = _data.intervals || [];
+      if (!intervals.includes(interval)) {
+        intervals.push(interval);
+      }
+    }
+    setDoc(intervalStateDoc, {
+      closePrice,
+      emaValue,
+      rsiValue,
+      openPrice: klineDataForHistory.openPrice,
+      highPrice: klineDataForHistory.highPrice,
+      lowPrice: klineDataForHistory.lowPrice,
+      timestamp: new Date().toISOString(),
+      intervals,
+    });
+    addDoc(intervalStateDocRef, {
+      closePrice,
+      emaValue,
+      rsiValue,
+      openPrice: klineDataForHistory.openPrice,
+      highPrice: klineDataForHistory.highPrice,
+      lowPrice: klineDataForHistory.lowPrice,
+      timestamp: new Date().toISOString(),
+    });
+    // if (!intervalStateDoc.exists()) {
+    //   // Se o documento não existir, cria um novo com os dados iniciais
+    //   await setDoc(intervalStateDocRef, {
+    //     emaHistory: [emaValue],
+    //     rsiHistory: [rsiValue],
+    //     priceHistory: [closePrice],
+    //     dateHistory: [new Date().toISOString()],
+    //   });
+    // } else {
+    //   await updateDoc(intervalStateDocRef, {
+    //     emaHistory: arrayUnion(emaValue),
+    //     rsiHistory: arrayUnion(rsiValue),
+    //     priceHistory: arrayUnion(closePrice),
+    //     dateHistory: arrayUnion(new Date().toISOString()),
+    //   });
+    // }
   } catch (error) {
-    console.error(`Erro ao salvar dados para ${symbol} no Firebase:`, error);
+    console.error(
+      `Erro ao salvar estado dos indicadores para ${symbol}@${interval} no Firestore:`,
+      error
+    );
+  }
+
+  try {
+  } catch (error) {
+    console.error(
+      `Erro ao salvar kline histórico para ${symbol}@${interval} no Firestore:`,
+      error
+    );
   }
 }
 
-export const CoinRepository = {loadSymbolDataFromFirebase, saveSymbolDataToFirebase};
+export const CoinRepository = {
+  loadSymbolIntervalData: loadSymbolIntervalDataFromFirebase,
+  saveSymbolIntervalData: saveSymbolIntervalDataToFirebase,
+};
