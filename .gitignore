@@ -4,3 +4,4 @@ node_modules
 .env.development
 yarn.lock
 dist
+package-lock.json
