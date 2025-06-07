@@ -132,10 +132,8 @@ const main = async () => {
   );
 
   console.log(`Iniciando monitoramento para ${streams.length} streams...`);
-
-  binance.websockets.subscribeCombined(
-    streams,
-    (klineEventData: KlineEvent) => {
+  streams.forEach((stream) => {
+    binance.websockets.subscribe(stream, (klineEventData: KlineEvent) => {
       // Garante que o evento é para um símbolo que estamos monitorando
       if (symbolsToMonitor.includes(klineEventData.s)) {
         handleKlineData(klineEventData).catch((e) =>
@@ -145,8 +143,8 @@ const main = async () => {
           )
         );
       }
-    }
-  );
+    });
+  });
 };
 
 /**
