@@ -3,3 +3,4 @@ node_modules
 # web
 .env.development
 yarn.lock
+dist

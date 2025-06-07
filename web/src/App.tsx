@@ -6,6 +6,7 @@ import {
   doc,
   orderBy,
   query,
+  onSnapshot,
 } from "firebase/firestore";
 import { firestore } from "./firebase";
 import { use, useEffect, useState } from "react";
@@ -50,124 +51,150 @@ export const App = () => {
   const [selectedInterval, setSelectedInterval] = useState<string | null>(null);
   const [coinHistoric, setCoinHistoric] = useState<CoinHistoric[]>([]);
 
-  const changeSelectedCoin = (coin: Coin) => {
-    setSelectedCoin(coin);
-  };
-  const getOnChangeInterval = async (interval: string | null) => {
-    if (!selectedCoin) return;
-    const _collection = collection(
-      firestore,
-      `/marketData/${selectedCoin?.id}/${interval}`
-    );
-    const orderCollection = orderBy("timestamp", "asc");
-
-    const coinDocRef = await getDocs(query(_collection, orderCollection));
-    coinDocRef.docChanges().forEach((change) => {
-      if (change.type === "added") {
-        const timestamp = new Date(change.doc.data().timestamp).toLocaleString();
-        console.log("New coin: ", { ...change.doc.data(), timestamp });
-      }
-      if (change.type === "modified") {
-        console.log("Modified coin: ", change.doc.data());
-      }
-      if (change.type === "removed") {
-        console.log("Removed coin: ", change.doc.data());
-      }
-    });
-    // console.log("🚀 ~ coinDocRef:", coinDocRef);
-    const _coinHistoric = coinDocRef.docs.map((x) => {
-      const timestamp = new Date(x.data().timestamp).toLocaleString();
-      return {
-        ...x.data(),
-        timestamp,
-      } as CoinHistoric;
-    });
-    
-  };
-  const changeSelectedInterval = async (interval: string | null) => {
-    setSelectedInterval(interval);
-    getOnChangeInterval(interval);
-  };
-
   useEffect(() => {
-    const get = async () => {
-      const intervalStateDocRef = await getDocs(
-        collection(firestore, "marketData")
+    const getCoins = async () => {
+      const marketDataCol = collection(firestore, "marketData");
+      const q = query(marketDataCol, orderBy("timestamp", "desc"));
+      const coinSnapshot = await getDocs(q);
+      const coinsList = coinSnapshot.docs.map(
+        (doc) => ({ id: doc.id, ...doc.data() } as Coin)
       );
-      //   console.log("🚀 ~ intervalStateDocRef:", intervalStateDocRef);
-      const _coins = intervalStateDocRef.docs.map(
-        (x) =>
-          ({
-            id: x.id,
-            ...x.data(),
-          } as Coin)
-      );
-      setCoins(_coins);
+      setCoins(coinsList);
+
+      if (coinsList.length > 0) {
+        const coin = coinsList[0];
+        setSelectedCoin(coin);
+        const interval = coin.intervals?.[0];
+        if (interval) setSelectedInterval(interval);
+      }
     };
-    get();
+    getCoins();
   }, []);
 
   useEffect(() => {
-    if (!selectedCoin) return;
-    // Carrega o primeiro intervalo por padrão
-    const firstInterval = selectedCoin.intervals?.[0] || null;
-    setSelectedInterval(firstInterval);
-    getOnChangeInterval(firstInterval);
+    if (selectedCoin) {
+      const firstInterval = selectedCoin.intervals?.[0] || null;
+      if (!selectedInterval) setSelectedInterval(firstInterval);
+    }
   }, [selectedCoin]);
 
-  //   useEffect(() => {
-  //     if (!selectedInterval) return;
-  //   }, [selectedInterval]);
-  return (
-    <div className="w-screen flex bg-gray-900 text-base text-white">
-      <div className="bg-gray-700 overflow-y-auto h-screen w-full max-w-48  flex flex-col">
-        {coins.map((coin) => (
-          <button
-            className={classNames(
-              "p-4 flex flex-col items-start cursor-pointer hover:bg-gray-600",
-              {
-                "bg-gray-600": selectedCoin?.id === coin.id,
-                "bg-gray-700": selectedCoin?.id !== coin.id,
-              }
-            )}
-            key={coin.id}
-            onClick={() => changeSelectedCoin(coin)}
-          >
-            <span className="">{coin.id}</span>
-            <span className="text-sm text-gray-300">
-              {new Intl.NumberFormat("en-US", {
-                style: "currency",
-                currency: "USD",
-              }).format(coin.closePrice)}
-            </span>
+  useEffect(() => {
+    if (!selectedCoin || !selectedInterval) {
+      setCoinHistoric([]);
+      return;
+    }
 
-            {/* <p>Close Price: {coin.closePrice}</p>
-            <p>EMA Value: {coin.emaValue}</p>
-            <p>High Price: {coin.highPrice}</p>
-            <p>Low Price: {coin.lowPrice}</p>
-            <p>Open Price: {coin.openPrice}</p>
-            <p>RSI Value: {coin.rsiValue}</p>
-            <p>Timestamp: {coin.timestamp}</p> */}
-          </button>
-        ))}
-      </div>
-      <div className="bg-gray-700 overflow-y-auto h-screen w-full max-w-32  flex flex-col">
-        {selectedCoin && (
-          <Intervals
-            intervals={selectedCoin?.intervals}
-            selectedInterval={selectedInterval}
-            changeSelectedInterval={changeSelectedInterval}
-          />
-        )}
-      </div>
-      <div className="flex-1 flex flex-col items-center justify-center p-4">
-        {coinHistoric.length > 0 && <MyChartRCI data={coinHistoric} />}
-        {coinHistoric.length > 0 && <MyChart data={coinHistoric} />}
-      </div>
+    const historicCollection = collection(
+      firestore,
+      `/marketData/${selectedCoin.id}/${selectedInterval}`
+    );
+    const q = query(historicCollection, orderBy("timestamp", "asc"));
+
+    const unsubscribe = onSnapshot(q, (querySnapshot) => {
+      const newHistoricData = querySnapshot.docs.map((doc) => {
+        const data = doc.data();
+        const timestamp = new Date(data.timestamp).toLocaleString();
+        return { ...data, timestamp } as CoinHistoric;
+      });
+
+      setCoinHistoric(newHistoricData);
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [selectedCoin, selectedInterval]);
+
+  const changeSelectedCoin = (coin: Coin) => {
+    setSelectedCoin(coin);
+  };
+
+  const changeSelectedInterval = (interval: string | null) => {
+    setSelectedInterval(interval);
+  };
+  const lastHistoric = coinHistoric[coinHistoric.length - 1];
+  const intervals = selectedCoin?.intervals || ["1m", "5m"];
+  return (
+    <div className="bg-gray-900 text-base text-white">
+      <Header {...{ changeSelectedInterval, intervals, selectedInterval }} />
+      <main className="flex">
+        <div className="bg-gray-700 overflow-y-auto h-[calc(100vh-4rem)] w-full max-w-56  flex flex-col">
+          {coins.map((coin) => (
+            <button
+              className={classNames(
+                "p-4 flex flex-col items-start cursor-pointer hover:bg-gray-600",
+                {
+                  "bg-gray-600": selectedCoin?.id === coin.id,
+                  "bg-gray-700": selectedCoin?.id !== coin.id,
+                }
+              )}
+              key={coin.id}
+              onClick={() => changeSelectedCoin(coin)}
+            >
+              <span className="">{coin.id}</span>
+              <span className="text-sm text-gray-300">
+                {new Intl.NumberFormat("en-US", {
+                  style: "currency",
+                  currency: "USD",
+                }).format(coin.closePrice)}
+              </span>
+            </button>
+          ))}
+        </div>
+
+        <div className="flex-1 overflow-auto h-[calc(100vh-4rem)] p-8">
+          <header className="flex justify-between gap-16">
+            <h1 className="text-2xl font-bold mb-4">
+              {selectedCoin?.id} - {selectedInterval}
+            </h1>
+            {lastHistoric && (
+              <div className="flex flex-col gap-2 text-lg text-gray-300 mb-4">
+                <span>
+                  Fechamento:{" "}
+                  {new Intl.NumberFormat("en-US", {
+                    style: "currency",
+                    currency: "USD",
+                  }).format(lastHistoric.closePrice)}
+                </span>
+                <span>RCI: {lastHistoric.rsiValue}</span>
+              </div>
+            )}
+          </header>
+          <div className="flex-1 overflow-y-auto  flex flex-col items-center justify-center">
+            {coinHistoric.length > 0 && <MyChartRCI data={coinHistoric} />}
+            {coinHistoric.length > 0 && <MyChart data={coinHistoric} />}
+          </div>
+        </div>
+      </main>
     </div>
   );
 };
-
+interface HeaderProps {
+  intervals: string[];
+  selectedInterval: string | null;
+  changeSelectedInterval: (interval: string | null) => void;
+}
+const Header = ({
+  intervals,
+  selectedInterval,
+  changeSelectedInterval,
+}: HeaderProps) => {
+  return (
+    <header className="h-16 flex px-4 items-center bg-gray-800">
+      <select
+        value={selectedInterval || ""}
+        onChange={(e) => changeSelectedInterval(e.target.value)}
+        className="bg-gray-700 text-white p-2 rounded"
+      >
+        {intervals.map((interval) => (
+          <option key={interval} value={interval}>
+            {interval}
+          </option>
+        ))}
+      </select>
+    </header>
+  );
+};
 interface IntervalsProps {
   intervals: string[];
   selectedInterval: string | null;
@@ -320,7 +347,7 @@ const MyChartRCI = ({ data }: { data: CoinHistoric[] }) => {
 
         {/* Legenda do gráfico */}
         {/* <Legend /> */}
-
+        <Brush dataKey="timestamp" height={30} stroke="#8884d8" />
         <Line type="monotone" dataKey="rsiValue" stroke="#82ca9d" dot={false} />
       </LineChart>
     </ResponsiveContainer>
