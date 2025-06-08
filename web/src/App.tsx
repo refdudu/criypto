@@ -1,15 +1,12 @@
 import {
   collection,
   getDocs,
-  getDoc,
-  collectionGroup,
-  doc,
   orderBy,
   query,
   onSnapshot,
 } from "firebase/firestore";
 import { firestore } from "./firebase";
-import { use, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 
 import {
   LineChart,
@@ -195,36 +192,36 @@ const Header = ({
     </header>
   );
 };
-interface IntervalsProps {
-  intervals: string[];
-  selectedInterval: string | null;
-  changeSelectedInterval: (interval: string | null) => void;
-}
-const Intervals = ({
-  intervals,
-  selectedInterval,
-  changeSelectedInterval,
-}: IntervalsProps) => {
-  return (
-    <>
-      {intervals?.map((interval) => (
-        <button
-          className={classNames(
-            "p-4 flex flex-col items-start cursor-pointer hover:bg-gray-600",
-            {
-              "bg-gray-600": selectedInterval === interval,
-              "bg-gray-700": selectedInterval !== interval,
-            }
-          )}
-          key={interval}
-          onClick={() => changeSelectedInterval(interval)}
-        >
-          <span className="">{interval}</span>
-        </button>
-      ))}
-    </>
-  );
-};
+// interface IntervalsProps {
+//   intervals: string[];
+//   selectedInterval: string | null;
+//   changeSelectedInterval: (interval: string | null) => void;
+// }
+// const Intervals = ({
+//   intervals,
+//   selectedInterval,
+//   changeSelectedInterval,
+// }: IntervalsProps) => {
+//   return (
+//     <>
+//       {intervals?.map((interval) => (
+//         <button
+//           className={classNames(
+//             "p-4 flex flex-col items-start cursor-pointer hover:bg-gray-600",
+//             {
+//               "bg-gray-600": selectedInterval === interval,
+//               "bg-gray-700": selectedInterval !== interval,
+//             }
+//           )}
+//           key={interval}
+//           onClick={() => changeSelectedInterval(interval)}
+//         >
+//           <span className="">{interval}</span>
+//         </button>
+//       ))}
+//     </>
+//   );
+// };
 const MyChart = ({ data }: { data: CoinHistoric[] }) => {
   // Calculate min and max values for Y-axis domain
   const prices = data.reduce((acc, cur) => {
