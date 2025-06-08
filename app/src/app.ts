@@ -9,8 +9,8 @@ import { CoinRepository, HistoricalKlineData } from "./CoinRepository";
 export const config = {
   // Mantive a busca dinâmica de símbolos, você pode desabilitar se quiser
   dynamicSymbols: {
-    enabled: false,
-    topNGainers: 20,
+    enabled: true,
+    topNGainers: 10,
     quoteAsset: "USDT",
     minVolume24h: 10000000, // 10 Milhões em volume de USDT
     fallbackSymbols: ["BTCUSDT", "ETHUSDT"], // Símbolos para monitorar se a busca dinâmica estiver desabilitada
@@ -74,7 +74,8 @@ async function getTopGainersFromBinance(
       return config.dynamicSymbols.fallbackSymbols;
     }
     console.log(`Top ${topN} gainers selecionados:`, topGainers.join(", "));
-    return topGainers;
+
+    return [...topGainers, "BTCUSDT", "ETHUSDT"];
   } catch (error) {
     console.error("Erro ao buscar top gainers:", error);
     return config.dynamicSymbols.fallbackSymbols;
