@@ -12,7 +12,7 @@ export const config = {
   // Mantive a busca dinâmica de símbolos, você pode desabilitar se quiser
   dynamicSymbols: {
     enabled: true,
-    topNGainers: 10,
+    topNGainers: 50,
     quoteAsset: "USDT",
     minVolume24h: 10000000, // 10 Milhões em volume de USDT
     fallbackSymbols: ["BTCUSDT", "ETHUSDT"], // Símbolos para monitorar se a busca dinâmica estiver desabilitada
