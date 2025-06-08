@@ -61,16 +61,17 @@ async function saveSymbolIntervalDataToFirebase(
         intervals.push(interval);
       }
     }
-    setDoc(intervalStateDoc, {
-      closePrice,
-      emaValue,
-      rsiValue,
-      openPrice: klineDataForHistory.openPrice,
-      highPrice: klineDataForHistory.highPrice,
-      lowPrice: klineDataForHistory.lowPrice,
-      timestamp: new Date().toISOString(),
-      intervals,
-    });
+    if (interval === "1m")
+      setDoc(intervalStateDoc, {
+        closePrice,
+        emaValue,
+        rsiValue,
+        openPrice: klineDataForHistory.openPrice,
+        highPrice: klineDataForHistory.highPrice,
+        lowPrice: klineDataForHistory.lowPrice,
+        timestamp: new Date().toISOString(),
+        intervals,
+      });
     addDoc(intervalStateDocRef, {
       closePrice,
       emaValue,
