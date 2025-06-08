@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState } from "react";
-import { CoinService, type Coin } from "../services/CoinService";
+import { type Coin } from "../services/CoinService";
+import { SupabaseCoinService } from "../services/supabase/SupabaseCoinService";
 
 const CoinContext = createContext(
   {} as {
@@ -11,7 +12,16 @@ export const CoinProvider = ({ children }: { children: React.ReactNode }) => {
   const [coins, setCoins] = useState<Coin[]>([]);
   useEffect(() => {
     setCoins([]);
-    CoinService.getCoins(setCoins);
+    const get = async () => {
+      const coins = await SupabaseCoinService.getCoins();
+      setCoins(coins);
+    };
+    get();
+    const unsubscribe = SupabaseCoinService.watchCoins(setCoins);
+
+    return () => {
+      if (Boolean(unsubscribe)) unsubscribe.unsubscribe();
+    };
   }, []);
 
   return (

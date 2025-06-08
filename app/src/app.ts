@@ -3,7 +3,9 @@
 import Binance from "node-binance-api";
 import { KlineEvent, SymbolTimeframeIndicatorState } from "./interfaces";
 import "dotenv/config";
-import { CoinRepository, HistoricalKlineData } from "./CoinRepository";
+import { SupabaseCoinRepository } from "./supabase/SupabaseCoinRepository";
+import { HistoricalKlineData } from "./CoinRepository";
+// import { SupabaseCoinRepository, HistoricalKlineData } from "./SupabaseCoinRepository";
 
 // --- Configurações Simplificadas ---
 export const config = {
@@ -190,7 +192,7 @@ const handleKlineData = async (klinePayload: KlineEvent): Promise<void> => {
 
   // --- CÁLCULO DE RSI ---
   // 1. Busca os preços de fechamento históricos para o cálculo inicial
-  const historicalData = await CoinRepository.loadSymbolIntervalData(
+  const historicalData = await SupabaseCoinRepository.loadSymbolIntervalData(
     eventSymbol,
     interval
   );
@@ -281,7 +283,7 @@ const handleKlineData = async (klinePayload: KlineEvent): Promise<void> => {
     rsiValue: tfState.rsiValue,
   };
 
-  await CoinRepository.saveSymbolIntervalData(
+  await SupabaseCoinRepository.saveSymbolIntervalData(
     eventSymbol,
     interval,
     klineDataForHistory
