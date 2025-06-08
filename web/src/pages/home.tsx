@@ -5,7 +5,7 @@ import classNames from "classnames";
 export const HomePage = () => {
   const { coins } = useCoinContext();
   return (
-    <main className="grid h-[calc(100vh-4rem)] overflow-y-auto grid-cols-3 md:grid-cols-5 lg:grid-cols-6 gap-4 p-4">
+    <main className="grid h-screen overflow-y-auto grid-cols-3 md:grid-cols-5 lg:grid-cols-6 gap-4 p-4">
       {coins.map((coin) => (
         <div
           className={classNames(

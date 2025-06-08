@@ -16,9 +16,11 @@ import { useCoinContext } from "../contexts/CoinContext";
 import type { Coin, CoinHistoric } from "../services/CoinService";
 import { collection, onSnapshot, orderBy, query } from "firebase/firestore";
 import { firestore } from "../firebase";
+import { Header } from "../components/Header";
 
 export const Charts = () => {
-  const { coins, selectedInterval, setSelectedInterval } = useCoinContext();
+  const { coins } = useCoinContext();
+  const [selectedInterval, setSelectedInterval] = useState<string | null>(null);
   const [selectedCoin, setSelectedCoin] = useState<Coin | null>(null);
 
   const [coinHistoric, setCoinHistoric] = useState<CoinHistoric[]>([]);
@@ -82,56 +84,64 @@ export const Charts = () => {
   //   };
   //   const intervals = selectedCoin?.intervals || ["1m", "5m"];
   //   const lastHistoric = coinHistoric[coinHistoric.length - 1];
+  const intervals = ["1m", "5m", "15m", "1h", "4h"];
   return (
-    <main className="flex">
-      <div className="bg-gray-700 overflow-y-auto h-[calc(100vh-4rem)] w-full max-w-56  flex flex-col">
-        {coins.map((coin) => (
-          <button
-            className={classNames(
-              "p-4 flex flex-col items-start cursor-pointer hover:bg-gray-600",
-              {
-                "bg-gray-600": selectedCoin?.id === coin.id,
-                "bg-gray-700": selectedCoin?.id !== coin.id,
-              }
-            )}
-            key={coin.id}
-            onClick={() => changeSelectedCoin(coin)}
-          >
-            <span className="">{coin.id}</span>
-            <span className="text-sm text-gray-300">
-              {new Intl.NumberFormat("en-US", {
-                style: "currency",
-                currency: "USD",
-              }).format(coin.closePrice)}
-            </span>
-          </button>
-        ))}
-      </div>
-
-      <div className="flex-1 overflow-auto h-[calc(100vh-4rem)] p-8">
-        <header className="flex justify-between gap-16">
-          <h1 className="text-2xl font-bold mb-4">
-            {selectedCoin?.id} - {selectedInterval}
-          </h1>
-          {selectedCoin && (
-            <div className="flex flex-col gap-2 text-lg text-gray-300 mb-4">
-              <span>
-                Fechamento:{" "}
+    <div>
+      <Header
+        intervals={intervals}
+        selectedInterval={selectedInterval}
+        changeSelectedInterval={setSelectedInterval}
+      />
+      <main className="flex">
+        <div className="bg-gray-700 overflow-y-auto h-[calc(100vh-4rem)] w-full max-w-56  flex flex-col">
+          {coins.map((coin) => (
+            <button
+              className={classNames(
+                "p-4 flex flex-col items-start cursor-pointer hover:bg-gray-600",
+                {
+                  "bg-gray-600": selectedCoin?.id === coin.id,
+                  "bg-gray-700": selectedCoin?.id !== coin.id,
+                }
+              )}
+              key={coin.id}
+              onClick={() => changeSelectedCoin(coin)}
+            >
+              <span className="">{coin.id}</span>
+              <span className="text-sm text-gray-300">
                 {new Intl.NumberFormat("en-US", {
                   style: "currency",
                   currency: "USD",
-                }).format(selectedCoin.closePrice)}
+                }).format(coin.closePrice)}
               </span>
-              <span>RCI: {selectedCoin.rsiValue}</span>
-            </div>
-          )}
-        </header>
-        <div className="flex-1 overflow-y-auto  flex flex-col items-center justify-center">
-          {coinHistoric.length > 0 && <MyChartRCI data={coinHistoric} />}
-          {coinHistoric.length > 0 && <MyChart data={coinHistoric} />}
+            </button>
+          ))}
         </div>
-      </div>
-    </main>
+
+        <div className="flex-1 overflow-auto h-[calc(100vh-4rem)] p-8">
+          <header className="flex justify-between gap-16">
+            <h1 className="text-2xl font-bold mb-4">
+              {selectedCoin?.id} - {selectedInterval}
+            </h1>
+            {selectedCoin && (
+              <div className="flex flex-col gap-2 text-lg text-gray-300 mb-4">
+                <span>
+                  Fechamento:{" "}
+                  {new Intl.NumberFormat("en-US", {
+                    style: "currency",
+                    currency: "USD",
+                  }).format(selectedCoin.closePrice)}
+                </span>
+                <span>RCI: {selectedCoin.rsiValue}</span>
+              </div>
+            )}
+          </header>
+          <div className="flex-1 overflow-y-auto  flex flex-col items-center justify-center">
+            {coinHistoric.length > 0 && <MyChartRCI data={coinHistoric} />}
+            {coinHistoric.length > 0 && <MyChart data={coinHistoric} />}
+          </div>
+        </div>
+      </main>
+    </div>
   );
 };
 const MyChart = ({ data }: { data: CoinHistoric[] }) => {

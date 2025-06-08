@@ -1,4 +1,10 @@
-import { collection, onSnapshot, orderBy, query } from "firebase/firestore";
+import {
+  collection,
+  limit,
+  onSnapshot,
+  orderBy,
+  query,
+} from "firebase/firestore";
 import { firestore } from "../firebase";
 import type { Dispatch, SetStateAction } from "react";
 
@@ -30,7 +36,7 @@ export const CoinService = {
     //   (doc) => ({ id: doc.id, ...doc.data() } as Coin)
     // );
     const marketDataCol = collection(firestore, "marketData");
-    const q = query(marketDataCol, orderBy("timestamp", "desc"));
+    const q = query(marketDataCol, orderBy("timestamp", "desc"), limit(12));
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
       querySnapshot.docs.map((doc) => {
         const data = doc.data();
