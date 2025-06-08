@@ -46,7 +46,7 @@ export const App = () => {
   const [coins, setCoins] = useState<Coin[]>([]);
   const [selectedCoin, setSelectedCoin] = useState<Coin | null>(null);
   const [selectedInterval, setSelectedInterval] = useState<string | null>(null);
-  const [coinHistoric, setCoinHistoric] = useState<CoinHistoric[]>([]);
+  //   const [coinHistoric, setCoinHistoric] = useState<CoinHistoric[]>([]);
 
   useEffect(() => {
     const getCoins = async () => {
@@ -75,32 +75,32 @@ export const App = () => {
     }
   }, [selectedCoin]);
 
-  useEffect(() => {
-    if (!selectedCoin || !selectedInterval) {
-      setCoinHistoric([]);
-      return;
-    }
+  //   useEffect(() => {
+  //     if (!selectedCoin || !selectedInterval) {
+  //       setCoinHistoric([]);
+  //       return;
+  //     }
 
-    const historicCollection = collection(
-      firestore,
-      `/marketData/${selectedCoin.id}/${selectedInterval}`
-    );
-    const q = query(historicCollection, orderBy("timestamp", "asc"));
+  //     const historicCollection = collection(
+  //       firestore,
+  //       `/marketData/${selectedCoin.id}/${selectedInterval}`
+  //     );
+  //     const q = query(historicCollection, orderBy("timestamp", "asc"));
 
-    const unsubscribe = onSnapshot(q, (querySnapshot) => {
-      const newHistoricData = querySnapshot.docs.map((doc) => {
-        const data = doc.data();
-        const timestamp = new Date(data.timestamp).toLocaleString();
-        return { ...data, timestamp } as CoinHistoric;
-      });
+  //     const unsubscribe = onSnapshot(q, (querySnapshot) => {
+  //       const newHistoricData = querySnapshot.docs.map((doc) => {
+  //         const data = doc.data();
+  //         const timestamp = new Date(data.timestamp).toLocaleString();
+  //         return { ...data, timestamp } as CoinHistoric;
+  //       });
 
-      setCoinHistoric(newHistoricData);
-    });
+  //       setCoinHistoric(newHistoricData);
+  //     });
 
-    return () => {
-      unsubscribe();
-    };
-  }, [selectedCoin, selectedInterval]);
+  //     return () => {
+  //       unsubscribe();
+  //     };
+  //   }, [selectedCoin, selectedInterval]);
 
   const changeSelectedCoin = (coin: Coin) => {
     setSelectedCoin(coin);
@@ -109,7 +109,7 @@ export const App = () => {
   const changeSelectedInterval = (interval: string | null) => {
     setSelectedInterval(interval);
   };
-  const lastHistoric = coinHistoric[coinHistoric.length - 1];
+  //   const lastHistoric = coinHistoric[coinHistoric.length - 1];
   const intervals = selectedCoin?.intervals || ["1m", "5m"];
   return (
     <div className="bg-gray-900 text-base text-white">
@@ -144,22 +144,22 @@ export const App = () => {
             <h1 className="text-2xl font-bold mb-4">
               {selectedCoin?.id} - {selectedInterval}
             </h1>
-            {lastHistoric && (
+            {selectedCoin && (
               <div className="flex flex-col gap-2 text-lg text-gray-300 mb-4">
                 <span>
                   Fechamento:{" "}
                   {new Intl.NumberFormat("en-US", {
                     style: "currency",
                     currency: "USD",
-                  }).format(lastHistoric.closePrice)}
+                  }).format(selectedCoin.closePrice)}
                 </span>
-                <span>RCI: {lastHistoric.rsiValue}</span>
+                <span>RCI: {selectedCoin.rsiValue}</span>
               </div>
             )}
           </header>
           <div className="flex-1 overflow-y-auto  flex flex-col items-center justify-center">
-            {coinHistoric.length > 0 && <MyChartRCI data={coinHistoric} />}
-            {coinHistoric.length > 0 && <MyChart data={coinHistoric} />}
+            {/* {coinHistoric.length > 0 && <MyChartRCI data={coinHistoric} />}
+            {coinHistoric.length > 0 && <MyChart data={coinHistoric} />} */}
           </div>
         </div>
       </main>
@@ -222,131 +222,131 @@ const Header = ({
 //     </>
 //   );
 // };
-const MyChart = ({ data }: { data: CoinHistoric[] }) => {
-  // Calculate min and max values for Y-axis domain
-  const prices = data.reduce((acc, cur) => {
-    acc.push(cur.highPrice);
-    acc.push(cur.lowPrice);
-    return acc;
-  }, [] as number[]);
+// const MyChart = ({ data }: { data: CoinHistoric[] }) => {
+//   // Calculate min and max values for Y-axis domain
+//   const prices = data.reduce((acc, cur) => {
+//     acc.push(cur.highPrice);
+//     acc.push(cur.lowPrice);
+//     return acc;
+//   }, [] as number[]);
 
-  const yMin = Math.min(...prices);
-  const yMax = Math.max(...prices);
-  const padding = (yMax - yMin) * 0.1; // 10% padding
+//   const yMin = Math.min(...prices);
+//   const yMax = Math.max(...prices);
+//   const padding = (yMax - yMin) * 0.1; // 10% padding
 
-  return (
-    <ResponsiveContainer width="100%" height={400}>
-      <LineChart
-        data={data}
-        margin={{
-          top: 5,
-          right: 30,
-          left: 20,
-          bottom: 5,
-        }}
-      >
-        {/* Grade de fundo */}
-        <CartesianGrid strokeDasharray="3 3" />
+//   return (
+//     <ResponsiveContainer width="100%" height={400}>
+//       <LineChart
+//         data={data}
+//         margin={{
+//           top: 5,
+//           right: 30,
+//           left: 20,
+//           bottom: 5,
+//         }}
+//       >
+//         {/* Grade de fundo */}
+//         <CartesianGrid strokeDasharray="3 3" />
 
-        {/* Eixo X (horizontal) - usa a chave 'timestamp' dos dados */}
-        <XAxis dataKey="timestamp" />
+//         {/* Eixo X (horizontal) - usa a chave 'timestamp' dos dados */}
+//         <XAxis dataKey="timestamp" />
 
-        {/* Eixo Y (vertical) */}
-        {/* <YAxis /> */}
-        <YAxis domain={[yMin - padding, yMax + padding]} />
+//         {/* Eixo Y (vertical) */}
+//         {/* <YAxis /> */}
+//         <YAxis domain={[yMin - padding, yMax + padding]} />
 
-        {/* Tooltip (dica) que aparece ao passar o mouse */}
-        <Tooltip
-          content={({ payload }) => {
-            if (!payload?.[0]?.payload) return <></>;
-            const { timestamp, highPrice, lowPrice, rsiValue } =
-              payload?.[0]?.payload;
-            return (
-              <div className="p-2 bg-gray-800 rounded flex flex-col">
-                <span>Data: {timestamp}</span>
-                <span>Máximo: {highPrice}</span>
-                <span>Mínimo: {lowPrice}</span>
-                <span>RCI: {rsiValue}</span>
-              </div>
-            );
-          }}
-        />
+//         {/* Tooltip (dica) que aparece ao passar o mouse */}
+//         <Tooltip
+//           content={({ payload }) => {
+//             if (!payload?.[0]?.payload) return <></>;
+//             const { timestamp, highPrice, lowPrice, rsiValue } =
+//               payload?.[0]?.payload;
+//             return (
+//               <div className="p-2 bg-gray-800 rounded flex flex-col">
+//                 <span>Data: {timestamp}</span>
+//                 <span>Máximo: {highPrice}</span>
+//                 <span>Mínimo: {lowPrice}</span>
+//                 <span>RCI: {rsiValue}</span>
+//               </div>
+//             );
+//           }}
+//         />
 
-        {/* Legenda do gráfico */}
-        <Legend />
+//         {/* Legenda do gráfico */}
+//         <Legend />
 
-        {/* A primeira linha do gráfico - usa a chave 'highPrice' dos dados */}
-        <Line
-          type="monotone"
-          dataKey="highPrice"
-          stroke="#8884d8"
-          activeDot={{ r: 8 }}
-          dot={false}
-        />
-        <Brush dataKey="timestamp" height={30} stroke="#8884d8" />
-        {/* A segunda linha do gráfico - usa a chave 'lowPrice' dos dados */}
-        <Line type="monotone" dataKey="lowPrice" stroke="#82ca9d" dot={false} />
-        {/* <Line type="monotone" dataKey="rsiValue" stroke="#ca8282" dot={false} /> */}
+//         {/* A primeira linha do gráfico - usa a chave 'highPrice' dos dados */}
+//         <Line
+//           type="monotone"
+//           dataKey="highPrice"
+//           stroke="#8884d8"
+//           activeDot={{ r: 8 }}
+//           dot={false}
+//         />
+//         <Brush dataKey="timestamp" height={30} stroke="#8884d8" />
+//         {/* A segunda linha do gráfico - usa a chave 'lowPrice' dos dados */}
+//         <Line type="monotone" dataKey="lowPrice" stroke="#82ca9d" dot={false} />
+//         {/* <Line type="monotone" dataKey="rsiValue" stroke="#ca8282" dot={false} /> */}
 
-        {/* <Brush dataKey="lowPrice" height={30} stroke="#82ca9d" /> */}
-      </LineChart>
-    </ResponsiveContainer>
-  );
-};
-const MyChartRCI = ({ data }: { data: CoinHistoric[] }) => {
-  // Calculate min and max values for Y-axis domain
-  const prices = data.reduce((acc, cur) => {
-    acc.push(cur.rsiValue);
-    return acc;
-  }, [] as number[]);
+//         {/* <Brush dataKey="lowPrice" height={30} stroke="#82ca9d" /> */}
+//       </LineChart>
+//     </ResponsiveContainer>
+//   );
+// };
+// const MyChartRCI = ({ data }: { data: CoinHistoric[] }) => {
+//   // Calculate min and max values for Y-axis domain
+//   const prices = data.reduce((acc, cur) => {
+//     acc.push(cur.rsiValue);
+//     return acc;
+//   }, [] as number[]);
 
-  const yMin = Math.min(...prices);
-  const yMax = Math.max(...prices);
-  const padding = (yMax - yMin) * 0.1; // 10% padding
+//   const yMin = Math.min(...prices);
+//   const yMax = Math.max(...prices);
+//   const padding = (yMax - yMin) * 0.1; // 10% padding
 
-  return (
-    <ResponsiveContainer width="100%" height={100}>
-      <LineChart
-        data={data}
-        margin={{
-          top: 5,
-          right: 30,
-          left: 20,
-          bottom: 5,
-        }}
-      >
-        {/* Grade de fundo */}
-        <CartesianGrid strokeDasharray="3 3" />
+//   return (
+//     <ResponsiveContainer width="100%" height={100}>
+//       <LineChart
+//         data={data}
+//         margin={{
+//           top: 5,
+//           right: 30,
+//           left: 20,
+//           bottom: 5,
+//         }}
+//       >
+//         {/* Grade de fundo */}
+//         <CartesianGrid strokeDasharray="3 3" />
 
-        {/* Eixo X (horizontal) - usa a chave 'timestamp' dos dados */}
-        <XAxis dataKey="timestamp" />
+//         {/* Eixo X (horizontal) - usa a chave 'timestamp' dos dados */}
+//         <XAxis dataKey="timestamp" />
 
-        {/* Eixo Y (vertical) */}
-        {/* <YAxis /> */}
-        <YAxis domain={[yMin - padding, yMax + padding]} />
+//         {/* Eixo Y (vertical) */}
+//         {/* <YAxis /> */}
+//         <YAxis domain={[yMin - padding, yMax + padding]} />
 
-        {/* Tooltip (dica) que aparece ao passar o mouse */}
-        <Tooltip
-          content={({ payload }) => {
-            if (!payload?.[0]?.payload) return <></>;
-            const { timestamp, highPrice, lowPrice, rsiValue } =
-              payload?.[0]?.payload;
-            return (
-              <div className="p-2 bg-gray-800 rounded flex flex-col">
-                <span>Data: {timestamp}</span>
-                <span>Máximo: {highPrice}</span>
-                <span>Mínimo: {lowPrice}</span>
-                <span>RCI: {rsiValue}</span>
-              </div>
-            );
-          }}
-        />
+//         {/* Tooltip (dica) que aparece ao passar o mouse */}
+//         <Tooltip
+//           content={({ payload }) => {
+//             if (!payload?.[0]?.payload) return <></>;
+//             const { timestamp, highPrice, lowPrice, rsiValue } =
+//               payload?.[0]?.payload;
+//             return (
+//               <div className="p-2 bg-gray-800 rounded flex flex-col">
+//                 <span>Data: {timestamp}</span>
+//                 <span>Máximo: {highPrice}</span>
+//                 <span>Mínimo: {lowPrice}</span>
+//                 <span>RCI: {rsiValue}</span>
+//               </div>
+//             );
+//           }}
+//         />
 
-        {/* Legenda do gráfico */}
-        {/* <Legend /> */}
-        <Brush dataKey="timestamp" height={30} stroke="#8884d8" />
-        <Line type="monotone" dataKey="rsiValue" stroke="#82ca9d" dot={false} />
-      </LineChart>
-    </ResponsiveContainer>
-  );
-};
+//         {/* Legenda do gráfico */}
+//         {/* <Legend /> */}
+//         <Brush dataKey="timestamp" height={30} stroke="#8884d8" />
+//         <Line type="monotone" dataKey="rsiValue" stroke="#82ca9d" dot={false} />
+//       </LineChart>
+//     </ResponsiveContainer>
+//   );
+// };
