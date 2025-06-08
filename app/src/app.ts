@@ -77,7 +77,8 @@ async function getTopGainersFromBinance(
     }
     console.log(`Top ${topN} gainers selecionados:`, topGainers.join(", "));
 
-    return [...topGainers, "BTCUSDT", "ETHUSDT"];
+    // return [...topGainers, "BTCUSDT", "ETHUSDT"];
+    return topGainers
   } catch (error) {
     console.error("Erro ao buscar top gainers:", error);
     return config.dynamicSymbols.fallbackSymbols;
