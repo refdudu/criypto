@@ -126,7 +126,7 @@ export const SupabaseCoinService = {
         (payload) => {
           const { new: newData } = payload;
           if (!newData) return;
-          if (newData.interval !== "1m") return;
+          if (newData.interval === "1m") return;
           if (
             newData.rsi_value === null ||
             (newData.rsi_value >= 35 && newData.rsi_value <= 70)

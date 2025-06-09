@@ -90,7 +90,7 @@ const RCIData = () => {
     return (
       <div
         className={classNames(
-          "p-4 flex-1  justify-center flex flex-col hover:bg-gray-600",
+          "p-4 flex-1  justify-center flex flex-col",
           {
             "bg-red-600": historic.rsiValue && historic.rsiValue < 35,
             "bg-green-600": historic.rsiValue && historic.rsiValue > 70,
