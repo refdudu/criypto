@@ -52,7 +52,7 @@ export const SupabaseCoinService = {
       .from("symbols")
       .select("*")
       .order("last_timestamp", { ascending: false })
-      .limit(50);
+    //   .limit(50);
 
     if (error) {
       console.error("Error fetching initial coins:", error);
