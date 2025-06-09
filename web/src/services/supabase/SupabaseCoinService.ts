@@ -110,24 +110,34 @@ export const SupabaseCoinService = {
   watchIntervals: (
     setRciHistoric: Dispatch<SetStateAction<CoinHistoric[]>>
   ) => {
+    const rsiFilter =
+      "interval=neq.1m,rsi_value=not.is.null,or(rsi_value=lt.35,rsi_value=gt.70)";
+
     const channel = supabase
-      .channel("rci-alert-channel")
+      .channel("rci-alert-channel-filter")
       .on(
         "postgres_changes",
         {
           event: "INSERT",
           schema: "public",
           table: "market_data",
-            filter: "interval=neq.1m,or(rsi_value=lt.35,rsi_value=gt.70)",
+          filter: "interval=neq.1m",
         },
         (payload) => {
           const { new: newData } = payload;
           if (!newData) return;
+          if (newData.interval !== "1m") return;
+          if (
+            newData.rsi_value === null ||
+            (newData.rsi_value >= 35 && newData.rsi_value <= 70)
+          )
+            return;
+            
           const historicData = mapCoinHistoric(newData);
           setRciHistoric((p) => [historicData, ...p]);
         }
       )
-      .subscribe();
+      .subscribe(console.log);
 
     return channel;
   },
