@@ -109,30 +109,24 @@ const RCIData = () => {
     <div className="grid grid-cols-2">
       <GroupContainer
         historicList={buyGroup}
-        title={`Comprar ${buyGroup.length}`}
+        // title={`Comprar ${buyGroup.length}`}
       />
       <GroupContainer
         historicList={sellGroup}
-        title={`Vender ${sellGroup.length}`}
+        // title={`Vender ${sellGroup.length}`}
       />
     </div>
   );
 };
 interface GroupContainerProps {
   historicList: CoinHistoric[];
-  title: string;
 }
-const GroupContainer = ({ historicList, title }: GroupContainerProps) => {
+const GroupContainer = ({ historicList }: GroupContainerProps) => {
   return (
-    <div>
-      <header className=" px-4 h-12 flex items-center bg-gray-600">
-        <h2 className="">{title}</h2>
-      </header>
-      <div className="p-4 grid h-[calc(100vh-7rem)] overflow-y-auto grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {historicList.map((historic) => (
-          <CardRCIItem {...{ historic }} />
-        ))}
-      </div>
+    <div className="p-4 grid h-[calc(100vh-4rem)] overflow-y-auto grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      {historicList.map((historic) => (
+        <CardRCIItem {...{ historic }} />
+      ))}
     </div>
   );
 };
