@@ -10,6 +10,8 @@ const CoinContext = createContext(
 
 export const CoinProvider = ({ children }: { children: React.ReactNode }) => {
   const [coins, setCoins] = useState<Coin[]>([]);
+
+  
   useEffect(() => {
     setCoins([]);
     const get = async () => {
@@ -17,10 +19,10 @@ export const CoinProvider = ({ children }: { children: React.ReactNode }) => {
       setCoins(coins);
     };
     get();
-    const unsubscribe = SupabaseCoinService.watchCoins(setCoins);
+    const unsubscribeCoins = SupabaseCoinService.watchCoins(setCoins);
 
     return () => {
-      if (Boolean(unsubscribe)) unsubscribe.unsubscribe();
+      if (Boolean(unsubscribeCoins)) unsubscribeCoins.unsubscribe();
     };
   }, []);
 

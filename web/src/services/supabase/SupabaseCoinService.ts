@@ -1,4 +1,5 @@
 // src/services/CoinService.ts
+import type { CoinHistoric } from "../CoinService";
 import { supabase } from "./config"; // Seu cliente Supabase
 import type { Dispatch, SetStateAction } from "react";
 
@@ -26,6 +27,17 @@ const mapSupabaseToCoin = (data: any): Coin => ({
   rsiValue: data.last_rsi_value,
   timestamp: new Date(data.last_timestamp).toLocaleString(),
   intervals: data.intervals,
+});
+const mapCoinHistoric: (value: any) => CoinHistoric = (item) => ({
+  closePrice: item.close_price,
+  emaValue: item.ema_value,
+  highPrice: item.high_price,
+  lowPrice: item.low_price,
+  openPrice: item.open_price,
+  rsiValue: item.rsi_value,
+  timestamp: item.timestamp,
+  coinId: item.symbol,
+  interval: item.interval,
 });
 
 export const SupabaseCoinService = {
@@ -73,6 +85,46 @@ export const SupabaseCoinService = {
               return [...prevCoins, updatedCoin];
             }
           });
+        }
+      )
+      .subscribe();
+
+    return channel;
+  },
+  getIntervalsAlert: async (): Promise<CoinHistoric[]> => {
+    const { data, error } = await supabase
+      .from("market_data")
+      .select("*")
+      .not("interval", "eq", "1m")
+      .or("rsi_value.lt.35,rsi_value.gt.70")
+      .limit(50)
+      .order("timestamp", { ascending: false });
+
+    if (error) {
+      console.error("Error fetching interval alerts:", error);
+      return [];
+    }
+
+    return data.map(mapCoinHistoric);
+  },
+  watchIntervals: (
+    setRciHistoric: Dispatch<SetStateAction<CoinHistoric[]>>
+  ) => {
+    const channel = supabase
+      .channel("rci-alert-channel")
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "market_data",
+            filter: "interval=neq.1m,or(rsi_value=lt.35,rsi_value=gt.70)",
+        },
+        (payload) => {
+          const { new: newData } = payload;
+          if (!newData) return;
+          const historicData = mapCoinHistoric(newData);
+          setRciHistoric((p) => [historicData, ...p]);
         }
       )
       .subscribe();

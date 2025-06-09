@@ -218,7 +218,7 @@ const MyChart = ({ data }: { data: CoinHistoric[] }) => {
 const MyChartRCI = ({ data }: { data: CoinHistoric[] }) => {
   // Calculate min and max values for Y-axis domain
   const prices = data.reduce((acc, cur) => {
-    acc.push(cur.rsiValue);
+    if (cur.rsiValue) acc.push(cur.rsiValue);
     return acc;
   }, [] as number[]);
 

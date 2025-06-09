@@ -20,12 +20,14 @@ export interface Coin {
   intervals: string[];
 }
 export interface CoinHistoric {
+  interval: string;
+  coinId: string;
   closePrice: number;
   emaValue: number;
   highPrice: number;
   lowPrice: number;
   openPrice: number;
-  rsiValue: number;
+  rsiValue: number | null;
   timestamp: string;
 }
 
