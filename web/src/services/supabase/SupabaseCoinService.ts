@@ -110,8 +110,8 @@ export const SupabaseCoinService = {
   watchIntervals: (
     setRciHistoric: Dispatch<SetStateAction<CoinHistoric[]>>
   ) => {
-    const rsiFilter =
-      "interval=neq.1m,rsi_value=not.is.null,or(rsi_value=lt.35,rsi_value=gt.70)";
+    // const rsiFilter =
+    //   "interval=neq.1m,rsi_value=not.is.null,or(rsi_value=lt.35,rsi_value=gt.70)";
 
     const channel = supabase
       .channel("rci-alert-channel-filter")
