@@ -9,9 +9,7 @@ export const HomePage = () => {
   return (
     <div>
       <header className="flex items-center justify-between gap-4 h-16 px-4 bg-gray-800 c">
-        <h2>
-          {type === "alerts" ? "Alertas" : "Dados em tempo real"}
-        </h2>
+        <h2>{type === "alerts" ? "Alertas" : "Dados em tempo real"}</h2>
         <div className="flex items-center gap-4">
           <button
             onClick={() => setType("alerts")}
@@ -42,7 +40,7 @@ const CoinsData = () => {
   const { coins } = useCoinContext();
 
   return (
-    <div className="grid h-[calc(100vh-4rem)] overflow-y-auto grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 p-4">
+    <div className="grid h-[calc(100vh-4rem)] overflow-y-auto grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 p-4">
       {coins.map((coin) => (
         <div
           className={
