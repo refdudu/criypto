@@ -73,20 +73,7 @@ const CoinsData = () => {
   );
 };
 const RCIData = () => {
-  const [rciHistoric, setRciHistoric] = useState<CoinHistoric[]>([]);
-  useEffect(() => {
-    const get = async () => {
-      const data = await SupabaseCoinService.getIntervalsAlert();
-      setRciHistoric(data);
-    };
-    get();
-
-    const channel = SupabaseCoinService.watchIntervals(setRciHistoric);
-    return () => {
-      if (channel) channel.unsubscribe();
-      setRciHistoric([]);
-    };
-  }, []);
+  const { rciHistoric } = useCoinContext();
 
   const group = useMemo(() => {
     const group = rciHistoric.reduce((acc, historic) => {
