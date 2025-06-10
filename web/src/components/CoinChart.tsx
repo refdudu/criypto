@@ -7,9 +7,20 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
-//   Brush,
+  //   Brush,
 } from "recharts";
 import type { CoinHistoric } from "../services/CoinService";
+
+export const DrawerCoinChart = () => {
+  return (
+    <div className="fixed top-0 left-0 right-0 z-50 flex">
+      <div className="flex-1 bg-black opacity-60 cursor-pointer"/>
+      <div className="w-full flex items-center justify-center max-w-[900px] h-screen bg-gray-800 p-4">
+        <CoinChart data={[]} />
+      </div>
+    </div>
+  );
+};
 
 export const CoinChart = ({ data }: { data: CoinHistoric[] }) => {
   // Calculate min and max values for Y-axis domain
