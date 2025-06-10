@@ -25,21 +25,21 @@ export const Charts = () => {
 
   const [coinHistoric, setCoinHistoric] = useState<CoinHistoric[]>([]);
 
-  useEffect(() => {
-    if (coins.length > 0 && !selectedCoin) {
-      const coin = coins[0];
-      setSelectedCoin(coin);
-      const interval = coin.intervals?.[0];
-      if (interval) setSelectedInterval(interval);
-    }
-  }, [coins, selectedCoin]);
+//   useEffect(() => {
+//     if (coins.length > 0 && !selectedCoin) {
+//       const coin = coins[0];
+//       setSelectedCoin(coin);
+//       const interval = coin.intervals?.[0];
+//       if (interval) setSelectedInterval(interval);
+//     }
+//   }, [coins, selectedCoin]);
 
-  useEffect(() => {
-    if (selectedCoin) {
-      const firstInterval = selectedCoin.intervals?.[0] || null;
-      if (!selectedInterval) setSelectedInterval(firstInterval);
-    }
-  }, [selectedCoin]);
+//   useEffect(() => {
+//     if (selectedCoin) {
+//       const firstInterval = selectedCoin.intervals?.[0] || null;
+//       if (!selectedInterval) setSelectedInterval(firstInterval);
+//     }
+//   }, [selectedCoin]);
 
   useEffect(() => {
     if (!selectedCoin || !selectedInterval) {
@@ -68,12 +68,12 @@ export const Charts = () => {
     };
   }, [selectedCoin, selectedInterval]);
 
-  useEffect(() => {
-    if (selectedCoin) {
-      const firstInterval = selectedCoin.intervals?.[0] || null;
-      if (!selectedInterval) setSelectedInterval(firstInterval);
-    }
-  }, [selectedCoin]);
+//   useEffect(() => {
+//     if (selectedCoin) {
+//       const firstInterval = selectedCoin.intervals?.[0] || null;
+//     //   if (!selectedInterval) setSelectedInterval(firstInterval);
+//     }
+//   }, [selectedCoin]);
 
   const changeSelectedCoin = (coin: Coin) => {
     setSelectedCoin(coin);
