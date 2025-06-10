@@ -1,16 +1,17 @@
 import moment from "moment";
 import { useCoinContext } from "../contexts/CoinContext";
 import classNames from "classnames";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import type { CoinHistoric } from "../services/CoinService";
-import { SupabaseCoinService } from "../services/supabase/SupabaseCoinService";
 
 export const HomePage = () => {
   const [type, setType] = useState<"coins" | "alerts">("coins");
   return (
     <div>
-      <header className="flex items-center justify-between gap-4 h-16 px-4 bg-gray-800">
-        <h2>{type === "alerts" ? "Alertas" : "Dados em tempo real"}</h2>
+      <header className="flex items-center justify-between gap-4 h-16 px-4 bg-gray-800 c">
+        <h2>
+          {type === "alerts" ? "Alertas" : "Dados em tempo real"}
+        </h2>
         <div className="flex items-center gap-4">
           <button
             onClick={() => setType("alerts")}
@@ -41,16 +42,12 @@ const CoinsData = () => {
   const { coins } = useCoinContext();
 
   return (
-    <div className="grid h-[calc(100vh-4rem)] overflow-y-auto grid-cols-3 md:grid-cols-5 lg:grid-cols-6 gap-4 p-4">
+    <div className="grid h-[calc(100vh-4rem)] overflow-y-auto grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 p-4">
       {coins.map((coin) => (
         <div
-          className={classNames(
-            "p-4 flex-1  justify-center flex flex-col hover:bg-gray-600",
-            {
-              "bg-red-600": coin.rsiValue && coin.rsiValue < 35,
-              "bg-green-600": coin.rsiValue && coin.rsiValue > 70,
-            }
-          )}
+          className={
+            "p-4 flex-1  justify-center flex flex-col hover:bg-gray-600"
+          }
           key={coin.id}
           onClick={() => {}}
         >
@@ -59,14 +56,30 @@ const CoinsData = () => {
             {new Intl.NumberFormat("en-US", {
               style: "currency",
               currency: "USD",
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+              //   unitDisplay: "long",
             }).format(coin.closePrice)}
           </span>
-          <span className="text-sm text-gray-300">
-            RSI: <b>{coin.rsiValue?.toFixed(2)}</b>
-          </span>
-          <span className="text-sm text-gray-300">
-            Date: <b>{moment(coin.timestamp).format("HH:mm MM/DD/YY")}</b>
-          </span>
+
+          {coin.intervals.map((interval) => (
+            <div
+              key={interval.timestamp}
+              className={classNames(
+                {
+                  "bg-red-600": interval.rsiValue && interval.rsiValue < 35,
+                  "bg-green-600": interval.rsiValue && interval.rsiValue > 70,
+                },
+                "text-sm flex justify-between text-gray-300"
+              )}
+            >
+              <span className="w-9 font-bold">{interval.interval}</span>
+              <span className="w-9">{interval.rsiValue?.toFixed(2)}</span>
+              <span className="font-bold">
+                {moment(interval.timestamp).format("HH:mm DD/MM")}
+              </span>
+            </div>
+          ))}
         </div>
       ))}
     </div>
@@ -112,7 +125,10 @@ const GroupContainer = ({ historicList }: GroupContainerProps) => {
   return (
     <div className="p-4 grid h-[calc(100vh-4rem)] overflow-y-auto grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
       {historicList.map((historic) => (
-        <CardRCIItem {...{ historic }} />
+        <CardRCIItem
+          key={`${historic.timestamp}_${historic.coinId}_${historic.interval}`}
+          {...{ historic }}
+        />
       ))}
     </div>
   );
@@ -128,8 +144,6 @@ const CardRCIItem = ({ historic }: RCIHistoricItemProps) => {
         "bg-red-600": historic.rsiValue && historic.rsiValue < 35,
         "bg-green-600": historic.rsiValue && historic.rsiValue > 70,
       })}
-      key={`${historic.coinId}-${historic.interval}-${historic.timestamp}`}
-      onClick={() => {}}
     >
       <span className="">{historic.coinId}</span>
       <span className="text-sm text-gray-300">

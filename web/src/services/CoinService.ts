@@ -9,16 +9,17 @@ import { firestore } from "../firebase";
 import type { Dispatch, SetStateAction } from "react";
 
 export interface Coin {
+  id: string; // O nome do símbolo, ex: 'BTCUSDT'
   closePrice: number;
   emaValue: number;
   highPrice: number;
-  id: string;
   lowPrice: number;
   openPrice: number;
   rsiValue: number;
   timestamp: string;
-  intervals: string[];
+  intervals: CoinHistoric[];
 }
+
 export interface CoinHistoric {
   interval: string;
   coinId: string;

@@ -1,7 +1,6 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { type Coin, type CoinHistoric } from "../services/CoinService";
 import { SupabaseCoinService } from "../services/supabase/SupabaseCoinService";
-import { supabase } from "../services/supabase/config";
 
 const CoinContext = createContext(
   {} as {
@@ -15,7 +14,6 @@ export const CoinProvider = ({ children }: { children: React.ReactNode }) => {
   const [rciHistoric, setRciHistoric] = useState<CoinHistoric[]>([]);
 
   useEffect(() => {
-    setCoins([]);
     const get = async () => {
       const coins = await SupabaseCoinService.getCoins();
       setCoins(coins);
@@ -24,17 +22,14 @@ export const CoinProvider = ({ children }: { children: React.ReactNode }) => {
     };
     get();
 
-    const rciAlertChannel = SupabaseCoinService.watchIntervals(setRciHistoric);
-    const coinsChannel = SupabaseCoinService.watchCoins(setCoins);
-
+    const rciAlertChannel = SupabaseCoinService.watchIntervals(
+      setRciHistoric,
+      setCoins
+    );
     return () => {
       setRciHistoric([]);
       setCoins([]);
-
       if (rciAlertChannel) rciAlertChannel.unsubscribe();
-      if (Boolean(coinsChannel)) coinsChannel.unsubscribe();
-
-      supabase.removeAllChannels();
     };
   }, []);
 
