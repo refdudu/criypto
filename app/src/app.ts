@@ -17,7 +17,7 @@ export const config = {
     minVolume24h: 10000000, // 10 Milhões em volume de USDT
     fallbackSymbols: ["BTCUSDT", "ETHUSDT"], // Símbolos para monitorar se a busca dinâmica estiver desabilitada
   },
-  intervals: ["5m", "15m", "1h", "4h"],
+  intervals: ["5m", "15m", "30m", "1h", "4h"],
   emaPeriod: 21,
   rsiPeriod: 14,
   historyFetchLimit: 100, // Limite de dados históricos para buscar do Firebase
@@ -78,7 +78,7 @@ async function getTopGainersFromBinance(
     console.log(`Top ${topN} gainers selecionados:`, topGainers.join(", "));
 
     // return [...topGainers, "BTCUSDT", "ETHUSDT"];
-    return topGainers
+    return topGainers;
   } catch (error) {
     console.error("Erro ao buscar top gainers:", error);
     return config.dynamicSymbols.fallbackSymbols;
