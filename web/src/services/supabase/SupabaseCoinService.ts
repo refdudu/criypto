@@ -1,7 +1,30 @@
 // src/services/CoinService.ts
-import type { Coin, CoinHistoric } from "../CoinService";
 import { supabase } from "./config"; // Seu cliente Supabase
 import type { Dispatch, SetStateAction } from "react";
+
+export interface Coin {
+  id: string; // O nome do símbolo, ex: 'BTCUSDT'
+  closePrice: number;
+  emaValue: number;
+  highPrice: number;
+  lowPrice: number;
+  openPrice: number;
+  rsiValue: number;
+  timestamp: string;
+  intervals: CoinHistoric[];
+}
+
+export interface CoinHistoric {
+  interval: string;
+  coinId: string;
+  closePrice: number;
+  emaValue: number;
+  highPrice: number;
+  lowPrice: number;
+  openPrice: number;
+  rsiValue: number | null;
+  timestamp: string;
+}
 
 // Interface para os dados da moeda, alinhada com a tabela 'symbols'
 
@@ -37,7 +60,7 @@ const getCoinLastInterval = async (): Promise<CoinHistoric[]> => {
     console.error("Error fetching interval alerts:", error);
     return [];
   }
-  const order = ["1m", "5m", "15m", "1h", "4h", "1d"];
+  const order = ["1m", "5m", "15m", "30m", "1h", "4h", "1d"];
   return data.map(mapCoinHistoric).sort((a: CoinHistoric, b: CoinHistoric) => {
     return order.indexOf(a.interval) - order.indexOf(b.interval);
   });
@@ -132,7 +155,7 @@ export const SupabaseCoinService = {
         (payload) => {
           const { new: newData } = payload;
           if (!newData) return;
-          
+
           setCoins((p) => {
             return p.map((x) => {
               if (x.id === newData.symbol) {

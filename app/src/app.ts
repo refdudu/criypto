@@ -1,10 +1,15 @@
 // ./app.ts
 
 import Binance from "node-binance-api";
-import { KlineEvent, SymbolTimeframeIndicatorState } from "./interfaces";
+import {
+  BinanceDailyStat,
+  BinancePrevDayResponse,
+  HistoricalKlineData,
+  KlineEvent,
+  SymbolTimeframeIndicatorState,
+} from "./interfaces";
 import "dotenv/config";
 import { SupabaseCoinRepository } from "./supabase/SupabaseCoinRepository";
-import { HistoricalKlineData } from "./CoinRepository";
 // import { SupabaseCoinRepository, HistoricalKlineData } from "./SupabaseCoinRepository";
 
 // --- Configurações Simplificadas ---
@@ -17,10 +22,10 @@ export const config = {
     minVolume24h: 10000000, // 10 Milhões em volume de USDT
     fallbackSymbols: ["BTCUSDT", "ETHUSDT"], // Símbolos para monitorar se a busca dinâmica estiver desabilitada
   },
-  intervals: ["1m", "5m", "15m", "1h", "4h"],
+  intervals: ["5m", "15m", "1h", "4h"],
   emaPeriod: 21,
   rsiPeriod: 14,
-  historyFetchLimit: 100, // Limite de dados históricos para buscar do Firebase
+  historyFetchLimit: 100,
 };
 
 // --- Estado em Memória para os Indicadores ---
@@ -31,21 +36,16 @@ const indicatorStates: Record<
 > = {};
 
 // --- Função para Buscar Top Gainers (Mantida) ---
-interface BinanceDailyStat {
-  symbol: string;
-  priceChangePercent: string;
-  quoteVolume: string;
-}
 
 async function getTopGainersFromBinance(
   binance: Binance,
-  topN: number,
+  //   topN: number,
   quoteAsset: string,
   minVolume: number
 ): Promise<string[]> {
-  console.log(
-    `Buscando top ${topN} gainers (24h), quote: ${quoteAsset}, vol > ${minVolume}...`
-  );
+  //   console.log(
+  //     `Buscando top ${topN} gainers (24h), quote: ${quoteAsset}, vol > ${minVolume}...`
+  //   );
   try {
     const tickersResponse = await binance.prevDay(); // false para todos os símbolos
 
@@ -65,7 +65,8 @@ async function getTopGainersFromBinance(
       }))
       .sort((a, b) => b.priceChangePercent - a.priceChangePercent);
 
-    const topGainers = filteredAndSorted.slice(0, topN).map((t) => t.symbol);
+    const topGainers = filteredAndSorted.map((t) => t.symbol);
+    // const topGainers = filteredAndSorted.slice(0, topN).map((t) => t.symbol);
 
     if (topGainers.length === 0) {
       console.warn(
@@ -75,10 +76,10 @@ async function getTopGainersFromBinance(
       );
       return config.dynamicSymbols.fallbackSymbols;
     }
-    console.log(`Top ${topN} gainers selecionados:`, topGainers.join(", "));
+    // console.log(`Top ${topN} gainers selecionados:`, topGainers.join(", "));
 
     // return [...topGainers, "BTCUSDT", "ETHUSDT"];
-    return topGainers
+    return topGainers;
   } catch (error) {
     console.error("Erro ao buscar top gainers:", error);
     return config.dynamicSymbols.fallbackSymbols;
@@ -95,7 +96,7 @@ const main = async () => {
   const symbolsToMonitor = config.dynamicSymbols.enabled
     ? await getTopGainersFromBinance(
         binance,
-        config.dynamicSymbols.topNGainers,
+        // config.dynamicSymbols.topNGainers,
         config.dynamicSymbols.quoteAsset,
         config.dynamicSymbols.minVolume24h
       )
@@ -149,6 +150,28 @@ const main = async () => {
       }
     });
   });
+
+  binance.websockets.prevDay(
+    symbolsToMonitor,
+    async (_error: any, data: BinancePrevDayResponse) => {
+      //   if (parseFloat(data.quoteVolume) < 10000000) return;
+      const percent = parseFloat(data.percentChange);
+      if (percent < 20) return;
+      // cria registro de variação maior de 20% para caso um RSI menor que 30 nos intervalos de 5m, 15m e 1h aparecer
+      // se ja tiver registro da moeda deve ignorar
+
+      try {
+        const isObservable = await SupabaseCoinRepository.getSymbolObserve(
+          data.symbol
+        );
+        if (isObservable) return;
+        await SupabaseCoinRepository.createSymbolObserve(data.symbol);
+        console.log(data.percentChange, data.symbol);
+      } catch (e) {
+        console.log(e);
+      }
+    }
+  );
 };
 
 /**
@@ -156,11 +179,7 @@ const main = async () => {
  */
 const handleKlineData = async (klinePayload: KlineEvent): Promise<void> => {
   const { s: eventSymbol, k: kline, E: eventTime } = klinePayload;
-
-  // Processa apenas quando a vela (kline) fecha
-  if (!kline.x) {
-    return;
-  }
+  if (!kline.x) return;
 
   const interval = kline.i;
   const closePrice = parseFloat(kline.c);
@@ -273,7 +292,6 @@ const handleKlineData = async (klinePayload: KlineEvent): Promise<void> => {
     );
   }
 
-  // --- SALVAR NO FIREBASE ---
   const klineDataForHistory: HistoricalKlineData = {
     closePrice: closePrice,
     openPrice: parseFloat(kline.o),
@@ -289,6 +307,9 @@ const handleKlineData = async (klinePayload: KlineEvent): Promise<void> => {
     interval,
     klineDataForHistory
   );
+  if (!tfState.rsiValue || tfState.rsiValue > 30) return;
+  // lista das moedas com variação maior que 20% no dia
+  //   const
 };
 
 main().catch((error) => {
