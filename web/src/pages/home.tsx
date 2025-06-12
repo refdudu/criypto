@@ -2,7 +2,7 @@ import moment from "moment";
 import { useCoinContext } from "../contexts/CoinContext";
 import classNames from "classnames";
 import { useMemo, useState } from "react";
-import type { CoinHistoric } from "../services/CoinService";
+import type { CoinHistoric } from "../services/supabase/SupabaseCoinService";
 
 export const HomePage = () => {
   const [type, setType] = useState<"coins" | "alerts">("coins");

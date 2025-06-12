@@ -1,6 +1,9 @@
 import { createContext, useContext, useEffect, useState } from "react";
-import { type Coin, type CoinHistoric } from "../services/CoinService";
-import { SupabaseCoinService } from "../services/supabase/SupabaseCoinService";
+import {
+  SupabaseCoinService,
+  type Coin,
+  type CoinHistoric,
+} from "../services/supabase/SupabaseCoinService";
 // import { DrawerCoinChart } from "../components/CoinChart";
 
 const CoinContext = createContext(
@@ -13,7 +16,7 @@ const CoinContext = createContext(
 export const CoinProvider = ({ children }: { children: React.ReactNode }) => {
   const [coins, setCoins] = useState<Coin[]>([]);
   const [rciHistoric, setRciHistoric] = useState<CoinHistoric[]>([]);
-//   const [selectedCoin, setSelectedCoin] = useState("");
+  //   const [selectedCoin, setSelectedCoin] = useState("");
 
   useEffect(() => {
     const get = async () => {

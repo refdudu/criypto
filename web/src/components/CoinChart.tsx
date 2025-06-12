@@ -9,7 +9,7 @@ import {
   ResponsiveContainer,
   //   Brush,
 } from "recharts";
-import type { CoinHistoric } from "../services/CoinService";
+import type { CoinHistoric } from "../services/supabase/SupabaseCoinService";
 
 export const DrawerCoinChart = () => {
   return (

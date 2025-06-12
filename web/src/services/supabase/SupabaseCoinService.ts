@@ -1,7 +1,30 @@
 // src/services/CoinService.ts
-import type { Coin, CoinHistoric } from "../CoinService";
 import { supabase } from "./config"; // Seu cliente Supabase
 import type { Dispatch, SetStateAction } from "react";
+
+export interface Coin {
+  id: string; // O nome do símbolo, ex: 'BTCUSDT'
+  closePrice: number;
+  emaValue: number;
+  highPrice: number;
+  lowPrice: number;
+  openPrice: number;
+  rsiValue: number;
+  timestamp: string;
+  intervals: CoinHistoric[];
+}
+
+export interface CoinHistoric {
+  interval: string;
+  coinId: string;
+  closePrice: number;
+  emaValue: number;
+  highPrice: number;
+  lowPrice: number;
+  openPrice: number;
+  rsiValue: number | null;
+  timestamp: string;
+}
 
 // Interface para os dados da moeda, alinhada com a tabela 'symbols'
 

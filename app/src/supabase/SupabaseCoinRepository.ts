@@ -60,17 +60,6 @@ async function saveSymbolIntervalDataToSupabase(
       throw insertError.error;
     }
 
-    const { data: currentSymbol, error: fetchError } = await supabase
-      .from("symbols")
-      .select("intervals")
-      .eq("symbol", symbol)
-      .single();
-
-    if (fetchError && fetchError.code !== "PGRST116") {
-      console.error("Error fetching symbol for update:", fetchError);
-      throw fetchError;
-    }
-
     const summaryData: any = {
       symbol: symbol,
     };
@@ -111,12 +100,12 @@ async function createSymbolObserve(symbol: string): Promise<void> {
 }
 async function getSymbolObserve(symbol: string): Promise<boolean> {
   const response = await supabase
-  .from("symbols_observe")
-  .select("*")
-  // .eq("symbol", symbol)
-  .eq("status", ObserveSymbolStatusEnum.observing)
-  .limit(1)
-  .single();
+    .from("symbols_observe")
+    .select("*")
+    // .eq("symbol", symbol)
+    .eq("status", ObserveSymbolStatusEnum.observing)
+    .limit(1)
+    .single();
 
   if (!response.error && response.data) return true;
   return false;

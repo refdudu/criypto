@@ -25,7 +25,7 @@ export const config = {
   intervals: ["5m", "15m", "1h", "4h"],
   emaPeriod: 21,
   rsiPeriod: 14,
-  historyFetchLimit: 100, // Limite de dados históricos para buscar do Firebase
+  historyFetchLimit: 100,
 };
 
 // --- Estado em Memória para os Indicadores ---
@@ -137,19 +137,19 @@ const main = async () => {
   );
 
   console.log(`Iniciando monitoramento para ${streams.length} streams...`);
-    streams.forEach((stream) => {
-      binance.websockets.subscribe(stream, (klineEventData: KlineEvent) => {
-        // Garante que o evento é para um símbolo que estamos monitorando
-        if (symbolsToMonitor.includes(klineEventData.s)) {
-          handleKlineData(klineEventData).catch((e) =>
-            console.error(
-              `Erro em handleKlineData [${klineEventData.s}@${klineEventData.k.i}]:`,
-              e
-            )
-          );
-        }
-      });
+  streams.forEach((stream) => {
+    binance.websockets.subscribe(stream, (klineEventData: KlineEvent) => {
+      // Garante que o evento é para um símbolo que estamos monitorando
+      if (symbolsToMonitor.includes(klineEventData.s)) {
+        handleKlineData(klineEventData).catch((e) =>
+          console.error(
+            `Erro em handleKlineData [${klineEventData.s}@${klineEventData.k.i}]:`,
+            e
+          )
+        );
+      }
     });
+  });
 
   binance.websockets.prevDay(
     symbolsToMonitor,
@@ -292,7 +292,6 @@ const handleKlineData = async (klinePayload: KlineEvent): Promise<void> => {
     );
   }
 
-  // --- SALVAR NO FIREBASE ---
   const klineDataForHistory: HistoricalKlineData = {
     closePrice: closePrice,
     openPrice: parseFloat(kline.o),
