@@ -9,9 +9,7 @@ export const HomePage = () => {
   return (
     <div>
       <header className="flex items-center justify-between gap-4 h-16 px-4 bg-gray-800 c">
-        <h2>
-          {type === "alerts" ? "Alertas" : "Dados em tempo real"}
-        </h2>
+        <h2>{type === "alerts" ? "Alertas" : "Dados em tempo real"}</h2>
         <div className="flex items-center gap-4">
           <button
             onClick={() => setType("alerts")}

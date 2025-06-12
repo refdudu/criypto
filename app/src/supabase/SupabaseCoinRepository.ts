@@ -1,36 +1,19 @@
-// src/CoinRepository.ts
+import { HistoricalKlineData, ObserveSymbolStatusEnum } from "../interfaces";
 import { supabase } from "./config";
 
-// Interface for the kline data (can be shared across your app)
-export interface HistoricalKlineData {
-  emaValue: number;
-  rsiValue: number | null;
-  closePrice: number;
-  openPrice: number;
-  highPrice: number;
-  lowPrice: number;
-  timestamp: string;
-}
-
-/**
- * Loads the last 14 kline data points for a given symbol and interval.
- * @param symbol The coin symbol (e.g., 'BTCUSDT').
- * @param interval The timeframe (e.g., '1m', '5m').
- * @returns A promise that resolves to an array of historical data.
- */
 async function loadSymbolIntervalDataFromSupabase(
   symbol: string,
   interval: string
 ): Promise<HistoricalKlineData[]> {
   const { data, error } = await supabase
-    .from("market_data") // Select from the 'market_data' table
+    .from("market_data")
     .select(
       "ema_value, rsi_value, close_price, open_price, high_price, low_price, timestamp"
-    ) // Select specific columns
-    .eq("symbol", symbol) // WHERE symbol = 'BTCUSDT'
-    .eq("interval", interval) // AND interval = '1m'
-    .order("timestamp", { ascending: false }) // ORDER BY timestamp DESC
-    .limit(14); // LIMIT 14
+    )
+    .eq("symbol", symbol)
+    .eq("interval", interval)
+    .order("timestamp", { ascending: false })
+    .limit(14);
 
   if (error) {
     console.error(
@@ -40,7 +23,6 @@ async function loadSymbolIntervalDataFromSupabase(
     throw error;
   }
 
-  // Map from snake_case (database) to camelCase (JS interface)
   return data.map((item) => ({
     emaValue: item.ema_value,
     rsiValue: item.rsi_value,
@@ -52,19 +34,12 @@ async function loadSymbolIntervalDataFromSupabase(
   }));
 }
 
-/**
- * Saves a new kline data point to the historical log and updates the symbol summary.
- * @param symbol The coin symbol.
- * @param interval The timeframe.
- * @param klineDataForHistory The new kline data to save.
- */
 async function saveSymbolIntervalDataToSupabase(
   symbol: string,
   interval: string,
   klineDataForHistory: HistoricalKlineData
 ): Promise<void> {
   try {
-    // 1. Insert the new detailed kline data into the 'market_data' table
     const insertError = await supabase.from("market_data").insert({
       symbol,
       interval,
@@ -85,7 +60,6 @@ async function saveSymbolIntervalDataToSupabase(
       throw insertError.error;
     }
 
-    // 2. Fetch the current symbol's summary data to update its intervals array
     const { data: currentSymbol, error: fetchError } = await supabase
       .from("symbols")
       .select("intervals")
@@ -93,25 +67,15 @@ async function saveSymbolIntervalDataToSupabase(
       .single();
 
     if (fetchError && fetchError.code !== "PGRST116") {
-      // Ignore 'Range not satisfactory' error for no-rows-found
       console.error("Error fetching symbol for update:", fetchError);
       throw fetchError;
     }
 
-    const existingIntervals = currentSymbol?.intervals || [];
-    const newIntervals = existingIntervals.includes(interval)
-      ? existingIntervals
-      : [...existingIntervals, interval];
-
-    // 3. Prepare the data for the 'symbols' table upsert
-    // An upsert will create the row if it doesn't exist, or update it if it does.
     const summaryData: any = {
       symbol: symbol,
-      intervals: newIntervals,
     };
 
-    // If the interval is '1m', update the 'last_' fields with the latest data
-    if (interval === "1m") {
+    if (interval === "5m") {
       summaryData.last_timestamp = new Date().toISOString();
       summaryData.last_close_price = klineDataForHistory.closePrice;
       summaryData.last_open_price = klineDataForHistory.openPrice;
@@ -121,7 +85,6 @@ async function saveSymbolIntervalDataToSupabase(
       summaryData.last_rsi_value = klineDataForHistory.rsiValue;
     }
 
-    // 4. Upsert the summary data into the 'symbols' table
     const { error: upsertError } = await supabase
       .from("symbols")
       .upsert(summaryData);
@@ -137,9 +100,31 @@ async function saveSymbolIntervalDataToSupabase(
     );
   }
 }
+async function createSymbolObserve(symbol: string): Promise<void> {
+  const insertResponse = await supabase.from("symbols_observe").insert({
+    symbol,
+    status: ObserveSymbolStatusEnum.observing,
+  });
+  if (insertResponse.error) throw new Error(insertResponse.error.message);
 
-// Export the repository object with the new Supabase functions
+  console.log(`Symbol ${symbol} is now being observed.`);
+}
+async function getSymbolObserve(symbol: string): Promise<boolean> {
+  const response = await supabase
+  .from("symbols_observe")
+  .select("*")
+  // .eq("symbol", symbol)
+  .eq("status", ObserveSymbolStatusEnum.observing)
+  .limit(1)
+  .single();
+
+  if (!response.error && response.data) return true;
+  return false;
+}
+
 export const SupabaseCoinRepository = {
   loadSymbolIntervalData: loadSymbolIntervalDataFromSupabase,
   saveSymbolIntervalData: saveSymbolIntervalDataToSupabase,
+  createSymbolObserve,
+  getSymbolObserve,
 };

@@ -1,5 +1,50 @@
 // ./interfaces.ts
 
+export interface HistoricalKlineData {
+  emaValue: number;
+  rsiValue: number | null;
+  closePrice: number;
+  openPrice: number;
+  highPrice: number;
+  lowPrice: number;
+  timestamp: string;
+}
+export enum ObserveSymbolStatusEnum {
+  "observing" = 1,
+  "not_observing" = 2,
+  "error" = 3,
+}
+export interface BinancePrevDayResponse {
+  eventType: string | "24hrTicker";
+  eventTime: number;
+  symbol: string;
+  priceChange: string;
+  percentChange: string;
+  averagePrice: string;
+  prevClose: string;
+  close: string;
+  closeQty: string;
+  bestBid: string;
+  bestBidQty: string;
+  bestAsk: string;
+  bestAskQty: string;
+  open: string;
+  high: string;
+  low: string;
+  volume: string;
+  quoteVolume: string;
+  openTime: number;
+  closeTime: number;
+  firstTradeId: number;
+  lastTradeId: number;
+  numTrades: number;
+}
+export interface BinanceDailyStat {
+  symbol: string;
+  priceChangePercent: string;
+  quoteVolume: string;
+}
+
 export interface KlineTick {
   t: number; // Timestamp de início da vela
   T: number; // Timestamp de fechamento da vela
