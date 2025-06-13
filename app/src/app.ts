@@ -179,18 +179,20 @@ const handleKlineData = async (klinePayload: KlineEvent): Promise<void> => {
 
   const interval = kline.i;
   const closePrice = parseFloat(kline.c);
-  let tfState = indicatorStates[eventSymbol]?.[interval];
+  const tfState = indicatorStates[eventSymbol]?.[interval];
 
   if (!tfState) {
     console.warn(
       `Estado não encontrado para ${eventSymbol}@${interval}. Criando.`
     );
-    tfState = {
-      emaHistory: [],
-      closePrices: [],
-      rsiValue: null,
-      previousAverageGain: null,
-      previousAverageLoss: null,
+    indicatorStates[eventSymbol] = {
+      [interval]: {
+        emaHistory: [],
+        closePrices: [],
+        rsiValue: null,
+        previousAverageGain: null,
+        previousAverageLoss: null,
+      },
     };
   }
 
