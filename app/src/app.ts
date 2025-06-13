@@ -105,7 +105,7 @@ const main = async () => {
   );
 
   indicatorStates = await SupabaseCoinRepository.loadInitialStateForAllSymbols(
-    ["BTCUSDT"],
+    symbolsToMonitor,
     config.intervals,
     config.historyFetchLimit
   );
