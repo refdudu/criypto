@@ -308,18 +308,18 @@ const handleKlineData = async (klinePayload: KlineEvent): Promise<void> => {
   //   console.log(tfState);
   if (!tfState.rsiValue || tfState.rsiValue > 30) return;
   //   console.log(tfState);
-  const lastCoinHistoric = await SupabaseCoinRepository.getLastCoinHistoric(
-    eventSymbol,
-    interval
-  );
-  if (
-    !lastCoinHistoric.rsiValue ||
-    lastCoinHistoric.rsiValue < tfState.rsiValue
-  )
-    return;
-  console.log(
-    `RSI ${tfState.rsiValue} < 30 para ${eventSymbol}@${interval}. Salvando histórico.`
-  );
+//   const lastCoinHistoric = await SupabaseCoinRepository.getLastCoinHistoric(
+//     eventSymbol,
+//     interval
+//   );
+//   if (
+//     !lastCoinHistoric.rsiValue ||
+//     lastCoinHistoric.rsiValue < tfState.rsiValue
+//   )
+//     return;
+//   console.log(
+//     `RSI ${tfState.rsiValue} < 30 para ${eventSymbol}@${interval}. Salvando histórico.`
+//   );
 };
 
 main().catch((error) => {
