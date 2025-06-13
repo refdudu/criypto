@@ -1,7 +1,7 @@
 // ./interfaces.ts
 
 export interface HistoricalKlineData {
-  emaValue: number;
+  emaValue: number | null;
   rsiValue: number | null;
   closePrice: number;
   openPrice: number;
@@ -74,12 +74,11 @@ export interface KlineEvent {
 
 // Estado dos indicadores (EMA, RSI) para cada símbolo EM UM TIMEFRAME ESPECÍFICO
 export interface SymbolTimeframeIndicatorState {
-  allClosePriceHistoryForRSI: number[];
+  closePrices: number[];
   previousAverageGain: number | null;
   previousAverageLoss: number | null;
   rsiValue: number | null;
   emaHistory: number[];
-  closedKlineCountForEMA: number;
 }
 
 // Estado geral da estratégia para um SÍMBOLO

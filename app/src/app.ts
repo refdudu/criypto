@@ -9,7 +9,10 @@ import {
   SymbolTimeframeIndicatorState,
 } from "./interfaces";
 import "dotenv/config";
-import { SupabaseCoinRepository } from "./supabase/SupabaseCoinRepository";
+import {
+  DataSymbolsState,
+  SupabaseCoinRepository,
+} from "./supabase/SupabaseCoinRepository";
 // import { SupabaseCoinRepository, HistoricalKlineData } from "./SupabaseCoinRepository";
 
 // --- Configurações Simplificadas ---
@@ -22,18 +25,15 @@ export const config = {
     minVolume24h: 10000000, // 10 Milhões em volume de USDT
     fallbackSymbols: ["BTCUSDT", "ETHUSDT"], // Símbolos para monitorar se a busca dinâmica estiver desabilitada
   },
-  intervals: ["5m", "15m", "1h", "4h"],
+  intervals: ["1m", "5m", "15m", "1h", "4h"],
   emaPeriod: 21,
   rsiPeriod: 14,
-  historyFetchLimit: 100,
+  historyFetchLimit: 200,
 };
 
 // --- Estado em Memória para os Indicadores ---
 // Mantém os valores necessários para o cálculo contínuo (suavizado) do RSI
-const indicatorStates: Record<
-  string,
-  Record<string, SymbolTimeframeIndicatorState>
-> = {};
+let indicatorStates: DataSymbolsState = {};
 
 // --- Função para Buscar Top Gainers (Mantida) ---
 
@@ -43,9 +43,6 @@ async function getTopGainersFromBinance(
   quoteAsset: string,
   minVolume: number
 ): Promise<string[]> {
-  //   console.log(
-  //     `Buscando top ${topN} gainers (24h), quote: ${quoteAsset}, vol > ${minVolume}...`
-  //   );
   try {
     const tickersResponse = await binance.prevDay(); // false para todos os símbolos
 
@@ -66,7 +63,7 @@ async function getTopGainersFromBinance(
       .sort((a, b) => b.priceChangePercent - a.priceChangePercent);
 
     const topGainers = filteredAndSorted.map((t) => t.symbol);
-    // const topGainers = filteredAndSorted.slice(0, topN).map((t) => t.symbol);
+    //
 
     if (topGainers.length === 0) {
       console.warn(
@@ -76,9 +73,7 @@ async function getTopGainersFromBinance(
       );
       return config.dynamicSymbols.fallbackSymbols;
     }
-    // console.log(`Top ${topN} gainers selecionados:`, topGainers.join(", "));
 
-    // return [...topGainers, "BTCUSDT", "ETHUSDT"];
     return topGainers;
   } catch (error) {
     console.error("Erro ao buscar top gainers:", error);
@@ -86,21 +81,18 @@ async function getTopGainersFromBinance(
   }
 }
 
-// --- Lógica Principal ---
 const main = async () => {
   const binance = new Binance({
     APIKEY: process.env.BINANCE_API_KEY,
     APISECRET: process.env.BINANCE_API_SECRET,
   });
 
-  const symbolsToMonitor = config.dynamicSymbols.enabled
-    ? await getTopGainersFromBinance(
-        binance,
-        // config.dynamicSymbols.topNGainers,
-        config.dynamicSymbols.quoteAsset,
-        config.dynamicSymbols.minVolume24h
-      )
-    : config.dynamicSymbols.fallbackSymbols;
+  const symbolsToMonitor = await getTopGainersFromBinance(
+    binance,
+    // config.dynamicSymbols.topNGainers,
+    config.dynamicSymbols.quoteAsset,
+    config.dynamicSymbols.minVolume24h
+  );
 
   if (!symbolsToMonitor || symbolsToMonitor.length === 0) {
     console.error("ERRO CRÍTICO: Nenhum símbolo para monitorar. Encerrando.");
@@ -112,23 +104,27 @@ const main = async () => {
     symbolsToMonitor.join(", ")
   );
 
-  // Inicializa o estado em memória para cada símbolo e intervalo
-  for (const symbol of symbolsToMonitor) {
-    indicatorStates[symbol] = {};
-    for (const interval of config.intervals) {
-      indicatorStates[symbol][interval] = {
-        // Históricos não são mais necessários aqui, pois buscamos do repo
-        allClosePriceHistoryForRSI: [],
-        emaHistory: [],
-        // Essencial para o cálculo suavizado do RSI
-        previousAverageGain: null,
-        previousAverageLoss: null,
-        rsiValue: null,
-        closedKlineCountForEMA: 0, // Pode ser útil se o EMA precisar ser reiniciado
-      };
-    }
-    console.log(`[Setup] Estado em memória para ${symbol} inicializado.`);
-  }
+  indicatorStates = await SupabaseCoinRepository.loadInitialStateForAllSymbols(
+    ["BTCUSDT"],
+    config.intervals,
+    config.historyFetchLimit
+  );
+  //   handleKlineData({
+  //     s: "BTCUSDT",
+  //     k: {
+  //       i: "5m",
+  //       x: true,
+  //       t: Date.now(),
+  //       T: Date.now() + 300000, // 5 minutos depois
+  //       o: "50000",
+  //       c: "50500",
+  //       h: "51000",
+  //       l: "49500",
+  //       v: "1000",
+  //       n: 100,
+  //     },
+  //     E: Date.now(),
+  //   } as KlineEvent);
 
   const streams = symbolsToMonitor.flatMap((symbol) =>
     config.intervals.map(
@@ -205,26 +201,18 @@ const handleKlineData = async (klinePayload: KlineEvent): Promise<void> => {
       ? tfState.emaHistory[tfState.emaHistory.length - 1]
       : closePrice; // Usa o primeiro preço de fechamento se não houver histórico de EMA
   const currentEMA = closePrice * emaMultiplier + lastEMA * (1 - emaMultiplier);
+
   tfState.emaHistory.push(currentEMA);
   if (tfState.emaHistory.length > config.historyFetchLimit) {
     tfState.emaHistory.shift();
   }
 
-  // --- CÁLCULO DE RSI ---
-  // 1. Busca os preços de fechamento históricos para o cálculo inicial
-  const historicalData = await SupabaseCoinRepository.loadSymbolIntervalData(
-    eventSymbol,
-    interval
-  );
-  // O repositório retorna em ordem decrescente de tempo, então revertemos para ter do mais antigo ao mais novo
-  const closePrices = historicalData.map((d) => d.closePrice).reverse();
-  closePrices.push(closePrice); // Adiciona o preço de fechamento atual
+  tfState.closePrices.push(closePrice);
 
-  // 2. Calcula o RSI se tivermos dados suficientes
-  if (closePrices.length > config.rsiPeriod) {
+  if (tfState.closePrices.length > config.rsiPeriod) {
     const priceChanges: number[] = [];
-    for (let i = 1; i < closePrices.length; i++) {
-      const change = closePrices[i] - closePrices[i - 1];
+    for (let i = 1; i < tfState.closePrices.length; i++) {
+      const change = tfState.closePrices[i] - tfState.closePrices[i - 1];
       priceChanges.push(change);
     }
 
@@ -278,19 +266,19 @@ const handleKlineData = async (klinePayload: KlineEvent): Promise<void> => {
       config.emaPeriod
     }): ${currentEMA.toFixed(4)}`
   );
-  if (tfState.rsiValue !== null) {
-    console.log(
-      `[${eventSymbol}@${interval}] RSI(${
-        config.rsiPeriod
-      }): ${tfState.rsiValue.toFixed(2)}`
-    );
-  } else {
-    console.log(
-      `[${eventSymbol}@${interval}] RSI: Aguardando mais dados (${
-        closePrices.length
-      }/${config.rsiPeriod + 1} velas)`
-    );
-  }
+  //   if (tfState.rsiValue !== null) {
+  //     console.log(
+  //       `[${eventSymbol}@${interval}] RSI(${
+  //         config.rsiPeriod
+  //       }): ${tfState.rsiValue.toFixed(2)}`
+  //     );
+  //   } else {
+  //     console.log(
+  //       `[${eventSymbol}@${interval}] RSI: Aguardando mais dados (${
+  //         tfState.closePrices.length
+  //       }/${config.rsiPeriod + 1} velas)`
+  //     );
+  //   }
 
   const klineDataForHistory: HistoricalKlineData = {
     closePrice: closePrice,
@@ -307,9 +295,21 @@ const handleKlineData = async (klinePayload: KlineEvent): Promise<void> => {
     interval,
     klineDataForHistory
   );
+  //   console.log(tfState);
   if (!tfState.rsiValue || tfState.rsiValue > 30) return;
-  // lista das moedas com variação maior que 20% no dia
-  //   const
+  //   console.log(tfState);
+  const lastCoinHistoric = await SupabaseCoinRepository.getLastCoinHistoric(
+    eventSymbol,
+    interval
+  );
+  if (
+    !lastCoinHistoric.rsiValue ||
+    lastCoinHistoric.rsiValue < tfState.rsiValue
+  )
+    return;
+  console.log(
+    `RSI ${tfState.rsiValue} < 30 para ${eventSymbol}@${interval}. Salvando histórico.`
+  );
 };
 
 main().catch((error) => {

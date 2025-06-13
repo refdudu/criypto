@@ -1,10 +1,106 @@
-import { HistoricalKlineData, ObserveSymbolStatusEnum } from "../interfaces";
+import {
+  HistoricalKlineData,
+  ObserveSymbolStatusEnum,
+  SymbolTimeframeIndicatorState,
+} from "../interfaces";
 import { supabase } from "./config";
+import { writeFile } from "node:fs/promises";
 
-async function loadSymbolIntervalDataFromSupabase(
+export type DataSymbolsState = Record<
+  string,
+  Record<string, SymbolTimeframeIndicatorState>
+>;
+
+export interface CoinHistoric {
+  id: string;
+  interval: string;
+  symbol: string;
+  close_price: number;
+  ema_value: number | null;
+  high_price: number;
+  low_price: number;
+  open_price: number;
+  rsi_value: number | null;
+  timestamp: string;
+}
+
+async function loadInitialStateForAllSymbols(
+  symbols: string[],
+  intervals: string[],
+  limit: number
+): Promise<DataSymbolsState> {
+  console.log(`Buscando dados iniciais para ${symbols.length} símbolos...`);
+
+  //
+  const { data: _data, error } = await supabase.rpc(
+    "get_latest_market_data_for_symbols",
+    {
+      symbols_to_fetch: symbols,
+      intervals_to_fetch: intervals,
+      limit_per_group: limit,
+    }
+  );
+
+  if (error) {
+    console.error(
+      "Erro ao carregar dados iniciais do Supabase via RPC:",
+      error
+    );
+    throw error;
+  }
+  const data = _data as CoinHistoric[];
+  if (!data || data.length === 0) {
+    throw new Error(
+      "Nenhum dado histórico encontrado para os símbolos e intervalos fornecidos."
+    );
+  }
+
+  console.log(
+    `Recebidos ${data.length} registros do banco. Agrupando agora...`
+  );
+
+  const groupedState = data.reduce((acc: DataSymbolsState, item) => {
+    const { symbol, interval } = item;
+
+    const klineData: HistoricalKlineData = {
+      emaValue: item.ema_value,
+      rsiValue: item.rsi_value,
+      closePrice: item.close_price,
+      openPrice: item.open_price,
+      highPrice: item.high_price,
+      lowPrice: item.low_price,
+      timestamp: item.timestamp,
+    };
+
+    if (!acc[symbol]) {
+      acc[symbol] = {};
+    }
+
+    if (!acc[symbol][interval]) {
+      acc[symbol][interval] = {
+        closePrices: [],
+        emaHistory: [],
+        previousAverageGain: null,
+        previousAverageLoss: null,
+        rsiValue: null,
+      };
+    }
+
+    acc[symbol][interval].closePrices.push(klineData.closePrice);
+
+    if (klineData.emaValue) {
+      acc[symbol][interval].emaHistory.push(klineData.emaValue);
+    }
+
+    return acc;
+  }, {});
+
+  return groupedState;
+}
+async function getLastCoinHistoric(
   symbol: string,
   interval: string
-): Promise<HistoricalKlineData[]> {
+): Promise<HistoricalKlineData> {
   const { data, error } = await supabase
     .from("market_data")
     .select(
@@ -12,8 +108,8 @@ async function loadSymbolIntervalDataFromSupabase(
     )
     .eq("symbol", symbol)
     .eq("interval", interval)
-    .order("timestamp", { ascending: false })
-    .limit(14);
+    .limit(1)
+    .single();
 
   if (error) {
     console.error(
@@ -22,16 +118,15 @@ async function loadSymbolIntervalDataFromSupabase(
     );
     throw error;
   }
-
-  return data.map((item) => ({
-    emaValue: item.ema_value,
-    rsiValue: item.rsi_value,
-    closePrice: item.close_price,
-    openPrice: item.open_price,
-    highPrice: item.high_price,
-    lowPrice: item.low_price,
-    timestamp: item.timestamp,
-  }));
+  return {
+    emaValue: data.ema_value,
+    rsiValue: data.rsi_value,
+    closePrice: data.close_price,
+    openPrice: data.open_price,
+    highPrice: data.high_price,
+    lowPrice: data.low_price,
+    timestamp: data.timestamp,
+  };
 }
 
 async function saveSymbolIntervalDataToSupabase(
@@ -112,8 +207,10 @@ async function getSymbolObserve(symbol: string): Promise<boolean> {
 }
 
 export const SupabaseCoinRepository = {
-  loadSymbolIntervalData: loadSymbolIntervalDataFromSupabase,
+  //   loadSymbolIntervalData: loadSymbolIntervalDataFromSupabase,
   saveSymbolIntervalData: saveSymbolIntervalDataToSupabase,
   createSymbolObserve,
   getSymbolObserve,
+  loadInitialStateForAllSymbols,
+  getLastCoinHistoric,
 };
