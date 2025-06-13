@@ -25,7 +25,7 @@ export const config = {
     minVolume24h: 10000000, // 10 Milhões em volume de USDT
     fallbackSymbols: ["BTCUSDT", "ETHUSDT"], // Símbolos para monitorar se a busca dinâmica estiver desabilitada
   },
-  intervals: [ "5m", "15m", "1h", "4h"],
+  intervals: ["5m", "15m", "1h", "4h"],
   emaPeriod: 21,
   rsiPeriod: 14,
   historyFetchLimit: 200,
@@ -179,13 +179,19 @@ const handleKlineData = async (klinePayload: KlineEvent): Promise<void> => {
 
   const interval = kline.i;
   const closePrice = parseFloat(kline.c);
-  const tfState = indicatorStates[eventSymbol]?.[interval];
+  let tfState = indicatorStates[eventSymbol]?.[interval];
 
   if (!tfState) {
     console.warn(
-      `Estado não encontrado para ${eventSymbol}@${interval}. Pulando.`
+      `Estado não encontrado para ${eventSymbol}@${interval}. Criando.`
     );
-    return;
+    tfState = {
+      emaHistory: [],
+      closePrices: [],
+      rsiValue: null,
+      previousAverageGain: null,
+      previousAverageLoss: null,
+    };
   }
 
   console.log(
