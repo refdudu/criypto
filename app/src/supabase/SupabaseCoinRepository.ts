@@ -4,7 +4,6 @@ import {
   SymbolTimeframeIndicatorState,
 } from "../interfaces";
 import { supabase } from "./config";
-import { writeFile } from "node:fs/promises";
 
 export type DataSymbolsState = Record<
   string,
