@@ -25,7 +25,7 @@ export const config = {
     minVolume24h: 10000000, // 10 Milhões em volume de USDT
     fallbackSymbols: ["BTCUSDT", "ETHUSDT"], // Símbolos para monitorar se a busca dinâmica estiver desabilitada
   },
-  intervals: ["5m", "15m", "1h", "4h"],
+  intervals: ["1m", "5m", "15m", "1h", "4h"],
   emaPeriod: 21,
   rsiPeriod: 14,
   historyFetchLimit: 200,
