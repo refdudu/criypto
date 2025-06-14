@@ -123,7 +123,7 @@ export const SupabaseCoinService = {
   getIntervalsAlert: async (): Promise<CoinHistoric[]> => {
     const { data, error } = await supabase
       .from("market_data")
-      .select("rsi_value,timestamp,symbol,interval,close_price")
+      .select("rsi_value,timestamp,symbol,interval,close_price,ema_value")
       .not("interval", "eq", "1m")
       .or("rsi_value.lt.35,rsi_value.gt.70")
       .limit(200)
@@ -143,7 +143,7 @@ export const SupabaseCoinService = {
   ) => {
     console.log("watch");
     const channel = supabase
-      .channel("rci-alert-channel-filter")
+      .channel("rsi-alert-channel-filter")
       .on(
         "postgres_changes",
         {

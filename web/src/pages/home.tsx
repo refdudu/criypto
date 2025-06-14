@@ -2,14 +2,49 @@ import moment from "moment";
 import { useCoinContext } from "../contexts/CoinContext";
 import classNames from "classnames";
 import { useMemo, useState } from "react";
-import type { CoinHistoric } from "../services/supabase/SupabaseCoinService";
+import type {
+  Coin,
+  CoinHistoric,
+} from "../services/supabase/SupabaseCoinService";
 
 export const HomePage = () => {
   const [type, setType] = useState<"coins" | "alerts">("coins");
+  const [inputText, setInputText] = useState("");
+  const { coins, rsiHistoric } = useCoinContext();
+
+  const { _coins, _rsiHistoric } = useMemo(() => {
+    const _coins = coins.filter((coin) => {
+      const searchText = inputText.toLowerCase();
+      return (
+        coin.id.toLowerCase().includes(searchText) ||
+        coin.intervals.some((interval) =>
+          interval.interval.toLowerCase().includes(searchText)
+        )
+      );
+    });
+    const _rsiHistoric = rsiHistoric.filter((historic) => {
+      const searchText = inputText.toLowerCase();
+      return (
+        historic.coinId.toLowerCase().includes(searchText) ||
+        historic.interval.toLowerCase().includes(searchText)
+      );
+    });
+    return { _coins, _rsiHistoric };
+  }, [coins, rsiHistoric, inputText]);
+
   return (
     <div>
       <header className="flex items-center justify-between gap-4 h-16 px-4 bg-gray-800 c">
-        <h2>{type === "alerts" ? "Alertas" : "Dados em tempo real"}</h2>
+        <div className="flex items-center gap-2">
+          <h2>{type === "alerts" ? "Alertas" : "Dados em tempo real"}</h2>
+          <input
+            type="text"
+            placeholder="Pesquisar..."
+            value={inputText}
+            onChange={(e) => setInputText(e.target.value)}
+            className="bg-gray-700 p-2 rounded"
+          />
+        </div>
         <div className="flex items-center gap-4">
           <button
             onClick={() => setType("alerts")}
@@ -31,14 +66,12 @@ export const HomePage = () => {
           </button>
         </div>
       </header>
-      {type === "coins" && <CoinsData />}
-      {type === "alerts" && <RCIData />}
+      {type === "coins" && <CoinsData coins={_coins} />}
+      {type === "alerts" && <RSIData rsiHistoric={_rsiHistoric} />}
     </div>
   );
 };
-const CoinsData = () => {
-  const { coins } = useCoinContext();
-
+const CoinsData = ({ coins }: { coins: Coin[] }) => {
   return (
     <div className="grid h-[calc(100vh-4rem)] overflow-y-auto grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 p-4">
       {coins.map((coin) => (
@@ -83,11 +116,9 @@ const CoinsData = () => {
     </div>
   );
 };
-const RCIData = () => {
-  const { rciHistoric } = useCoinContext();
-
+const RSIData = ({ rsiHistoric }: { rsiHistoric: CoinHistoric[] }) => {
   const group = useMemo(() => {
-    const group = rciHistoric.reduce((acc, historic) => {
+    const group = rsiHistoric.reduce((acc, historic) => {
       if (!historic.rsiValue) return acc;
 
       const key = historic.rsiValue < 35 ? "buy" : "sell";
@@ -98,7 +129,7 @@ const RCIData = () => {
       return acc;
     }, {} as Record<string, CoinHistoric[]>);
     return group;
-  }, [rciHistoric]);
+  }, [rsiHistoric]);
 
   const buyGroup = group["buy"] || [];
   const sellGroup = group["sell"] || [];
@@ -123,7 +154,7 @@ const GroupContainer = ({ historicList }: GroupContainerProps) => {
   return (
     <div className="p-4 grid h-[calc(100vh-4rem)] overflow-y-auto grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
       {historicList.map((historic) => (
-        <CardRCIItem
+        <CardRSIItem
           key={`${historic.timestamp}_${historic.coinId}_${historic.interval}`}
           {...{ historic }}
         />
@@ -132,10 +163,12 @@ const GroupContainer = ({ historicList }: GroupContainerProps) => {
   );
 };
 
-interface RCIHistoricItemProps {
+interface RSIHistoricItemProps {
   historic: CoinHistoric;
 }
-const CardRCIItem = ({ historic }: RCIHistoricItemProps) => {
+const CardRSIItem = ({ historic }: RSIHistoricItemProps) => {
+  console.log("🚀 ~ CardRSIItem ~ historic:", historic);
+  const isHigh = historic.closePrice > historic.emaValue;
   return (
     <div
       className={classNames("p-4 flex-1  justify-center flex flex-col", {
@@ -143,19 +176,22 @@ const CardRCIItem = ({ historic }: RCIHistoricItemProps) => {
         "bg-green-600": historic.rsiValue && historic.rsiValue > 70,
       })}
     >
-      <span className="">{historic.coinId}</span>
+      <div>
+        <span className="">
+          {historic.coinId} {isHigh ? "🔼" : "🔽"}
+        </span>
+      </div>
+
       <span className="text-sm text-gray-300">
-        Valor:{" "}
-        <b>
-          {new Intl.NumberFormat("en-US", {
-            style: "currency",
-            currency: "USD",
-          }).format(historic.closePrice)}
-        </b>
+        Ema: <b>{historic.emaValue?.toFixed(5)}</b>
+      </span>
+      <span className="text-sm text-gray-300">
+        Valor: <b>{historic.closePrice.toFixed(5)}</b>
       </span>
       <span className="text-sm text-gray-300">
         Intervalo: <b>{historic.interval}</b>
       </span>
+
       <span className="text-sm text-gray-300">
         RSI: <b>{historic.rsiValue?.toFixed(2)}</b>
       </span>

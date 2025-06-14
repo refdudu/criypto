@@ -67,7 +67,7 @@ export const CoinChart = ({ data }: { data: CoinHistoric[] }) => {
                 <span>Máximo: {highPrice}</span>
                 <span>Mínimo: {lowPrice}</span>
                 <span>Fechamento: {closePrice}</span>
-                <span>RCI: {rsiValue}</span>
+                <span>RSI: {rsiValue}</span>
               </div>
             );
           }}
