@@ -25,7 +25,7 @@ export const config = {
     minVolume24h: 10000000, // 10 Milhões em volume de USDT
     fallbackSymbols: ["BTCUSDT", "ETHUSDT"], // Símbolos para monitorar se a busca dinâmica estiver desabilitada
   },
-  intervals: [ "5m", "15m", "1h", "4h"],
+  intervals: ["5m", "15m", "1h", "4h"],
   emaPeriod: 21,
   rsiPeriod: 14,
   historyFetchLimit: 200,
@@ -85,6 +85,7 @@ const main = async () => {
   const binance = new Binance({
     APIKEY: process.env.BINANCE_API_KEY,
     APISECRET: process.env.BINANCE_API_SECRET,
+    reconnect: true,
   });
 
   const symbolsToMonitor = await getTopGainersFromBinance(
@@ -134,8 +135,7 @@ const main = async () => {
 
   console.log(`Iniciando monitoramento para ${streams.length} streams...`);
   streams.forEach((stream) => {
-    binance.websockets.subscribe(stream, (klineEventData: KlineEvent) => {
-      // Garante que o evento é para um símbolo que estamos monitorando
+    const callback = (klineEventData: KlineEvent) => {
       if (symbolsToMonitor.includes(klineEventData.s)) {
         handleKlineData(klineEventData).catch((e) =>
           console.error(
@@ -144,7 +144,15 @@ const main = async () => {
           )
         );
       }
-    });
+    };
+    binance.websockets.subscribe(
+      stream,
+      callback,
+      () => true,
+      (...error) => {
+        console.error("erro na assinatura do stream:", ...error);
+      }
+    );
   });
 
   binance.websockets.prevDay(
@@ -179,7 +187,6 @@ const handleKlineData = async (klinePayload: KlineEvent): Promise<void> => {
 
   const interval = kline.i;
   const closePrice = parseFloat(kline.c);
-  
 
   if (!indicatorStates[eventSymbol]?.[interval]) {
     console.warn(
@@ -308,18 +315,18 @@ const handleKlineData = async (klinePayload: KlineEvent): Promise<void> => {
   //   console.log(tfState);
   if (!tfState.rsiValue || tfState.rsiValue > 30) return;
   //   console.log(tfState);
-//   const lastCoinHistoric = await SupabaseCoinRepository.getLastCoinHistoric(
-//     eventSymbol,
-//     interval
-//   );
-//   if (
-//     !lastCoinHistoric.rsiValue ||
-//     lastCoinHistoric.rsiValue < tfState.rsiValue
-//   )
-//     return;
-//   console.log(
-//     `RSI ${tfState.rsiValue} < 30 para ${eventSymbol}@${interval}. Salvando histórico.`
-//   );
+  //   const lastCoinHistoric = await SupabaseCoinRepository.getLastCoinHistoric(
+  //     eventSymbol,
+  //     interval
+  //   );
+  //   if (
+  //     !lastCoinHistoric.rsiValue ||
+  //     lastCoinHistoric.rsiValue < tfState.rsiValue
+  //   )
+  //     return;
+  //   console.log(
+  //     `RSI ${tfState.rsiValue} < 30 para ${eventSymbol}@${interval}. Salvando histórico.`
+  //   );
 };
 
 main().catch((error) => {
