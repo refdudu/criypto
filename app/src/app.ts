@@ -105,27 +105,11 @@ const main = async () => {
     symbolsToMonitor.join(", ")
   );
 
-  //   indicatorStates = await SupabaseCoinRepository.loadInitialStateForAllSymbols(
-  //     symbolsToMonitor,
-  //     config.intervals,
-  //     config.historyFetchLimit
-  //   );
-  //   handleKlineData({
-  //     s: "BTCUSDT",
-  //     k: {
-  //       i: "5m",
-  //       x: true,
-  //       t: Date.now(),
-  //       T: Date.now() + 300000, // 5 minutos depois
-  //       o: "50000",
-  //       c: "50500",
-  //       h: "51000",
-  //       l: "49500",
-  //       v: "1000",
-  //       n: 100,
-  //     },
-  //     E: Date.now(),
-  //   } as KlineEvent);
+    indicatorStates = await SupabaseCoinRepository.loadInitialStateForAllSymbols(
+      symbolsToMonitor,
+      config.intervals,
+      config.historyFetchLimit
+    );
 
   const streams = symbolsToMonitor.flatMap((symbol) =>
     config.intervals.map(
@@ -147,9 +131,9 @@ const main = async () => {
       }
     };
 
-    console.log("Tentando conectar ao WebSocket...");
+    // console.log("Tentando conectar ao WebSocket...");
     await new Promise((resolve) =>
-      setTimeout(() => resolve(true), 2 * 1000 * index)
+      setTimeout(() => resolve(true),  1000 * index)
     );
     console.log(`${stream} iniciado.`);
 
