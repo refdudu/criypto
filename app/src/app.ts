@@ -22,7 +22,7 @@ export const config = {
     enabled: true,
     topNGainers: 100,
     quoteAsset: "USDT",
-    minVolume24h: 15000000, // 5 Milhões em volume de USDT
+    minVolume24h: 5000000, // 5 Milhões em volume de USDT
     fallbackSymbols: ["BTCUSDT", "ETHUSDT"], // Símbolos para monitorar se a busca dinâmica estiver desabilitada
   },
   intervals: ["5m", "15m", "1h", "4h"],
@@ -134,6 +134,19 @@ const main = async () => {
   );
 
   console.log(`Iniciando monitoramento para ${streams.length} streams...`);
+  await new Promise((resolve) => {
+    binance.websockets.userData(
+      () => {
+        console.log("Conexão WebSocket estabelecida.");
+        setTimeout(() => resolve(true), 10000); // Espera 10 segundos para garantir que a conexão esteja estável
+      },
+      (error) => {
+        console.error("Erro na conexão WebSocket:", error);
+        resolve(false);
+      }
+    );
+  });
+
   streams.forEach((stream) => {
     const callback = (klineEventData: KlineEvent) => {
       if (symbolsToMonitor.includes(klineEventData.s)) {
