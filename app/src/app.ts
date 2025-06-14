@@ -105,11 +105,11 @@ const main = async () => {
     symbolsToMonitor.join(", ")
   );
 
-  indicatorStates = await SupabaseCoinRepository.loadInitialStateForAllSymbols(
-    symbolsToMonitor,
-    config.intervals,
-    config.historyFetchLimit
-  );
+  //   indicatorStates = await SupabaseCoinRepository.loadInitialStateForAllSymbols(
+  //     symbolsToMonitor,
+  //     config.intervals,
+  //     config.historyFetchLimit
+  //   );
   //   handleKlineData({
   //     s: "BTCUSDT",
   //     k: {
@@ -134,20 +134,8 @@ const main = async () => {
   );
 
   console.log(`Iniciando monitoramento para ${streams.length} streams...`);
-  await new Promise((resolve) => {
-    binance.websockets.userData(
-      () => {
-        console.log("Conexão WebSocket estabelecida.");
-        setTimeout(() => resolve(true), 10000); // Espera 10 segundos para garantir que a conexão esteja estável
-      },
-      (error) => {
-        console.error("Erro na conexão WebSocket:", error);
-        resolve(false);
-      }
-    );
-  });
 
-  streams.forEach((stream) => {
+  streams.forEach(async (stream, index) => {
     const callback = (klineEventData: KlineEvent) => {
       if (symbolsToMonitor.includes(klineEventData.s)) {
         handleKlineData(klineEventData).catch((e) =>
@@ -158,13 +146,18 @@ const main = async () => {
         );
       }
     };
+
+    console.log("Tentando conectar ao WebSocket...");
+    await new Promise((resolve) =>
+      setTimeout(() => resolve(true), 2 * 1000 * index)
+    );
+    console.log(`${stream} iniciado.`);
+
     binance.websockets.subscribe(
       stream,
       callback,
       () => true,
-      (...error) => {
-        console.error("erro na assinatura do stream:", ...error);
-      }
+      () => true
     );
   });
 
