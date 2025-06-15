@@ -13,6 +13,7 @@ import {
   DataSymbolsState,
   SupabaseCoinRepository,
 } from "./supabase/SupabaseCoinRepository";
+import { lucaWebhook } from "./lucaWebhook";
 // import { SupabaseCoinRepository, HistoricalKlineData } from "./SupabaseCoinRepository";
 
 // --- Configurações Simplificadas ---
@@ -105,11 +106,11 @@ const main = async () => {
     symbolsToMonitor.join(", ")
   );
 
-    indicatorStates = await SupabaseCoinRepository.loadInitialStateForAllSymbols(
-      symbolsToMonitor,
-      config.intervals,
-      config.historyFetchLimit
-    );
+  indicatorStates = await SupabaseCoinRepository.loadInitialStateForAllSymbols(
+    symbolsToMonitor,
+    config.intervals,
+    config.historyFetchLimit
+  );
 
   const streams = symbolsToMonitor.flatMap((symbol) =>
     config.intervals.map(
@@ -133,7 +134,7 @@ const main = async () => {
 
     // console.log("Tentando conectar ao WebSocket...");
     await new Promise((resolve) =>
-      setTimeout(() => resolve(true),  1000 * index)
+      setTimeout(() => resolve(true), 1000 * index)
     );
     console.log(`${stream} iniciado.`);
 
@@ -297,12 +298,25 @@ const handleKlineData = async (klinePayload: KlineEvent): Promise<void> => {
     rsiValue: tfState.rsiValue,
   };
 
-  await SupabaseCoinRepository.saveSymbolIntervalData(
-    eventSymbol,
-    interval,
-    klineDataForHistory
-  );
+  try {
+    await SupabaseCoinRepository.saveSymbolIntervalData(
+      eventSymbol,
+      interval,
+      klineDataForHistory
+    );
+  } catch {}
   //   console.log(tfState);
+
+  switch (interval) {
+    case "1h": {
+      if (tfState.rsiValue && tfState.rsiValue <= 15) {
+        try {
+          await lucaWebhook(`${eventSymbol} - RSI ${tfState.rsiValue}`);
+        } catch {}
+      }
+    }
+  }
+
   if (!tfState.rsiValue || tfState.rsiValue > 30) return;
   //   console.log(tfState);
   //   const lastCoinHistoric = await SupabaseCoinRepository.getLastCoinHistoric(
