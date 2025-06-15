@@ -314,6 +314,7 @@ const handleKlineData = async (klinePayload: KlineEvent): Promise<void> => {
           await lucaWebhook(`${eventSymbol} - RSI ${tfState.rsiValue}`);
         } catch {}
       }
+      break;
     }
   }
 
