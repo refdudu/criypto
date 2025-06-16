@@ -308,17 +308,27 @@ const handleKlineData = async (klinePayload: KlineEvent): Promise<void> => {
   //   console.log(tfState);
 
   switch (interval) {
-    case "1h": {
-      if (tfState.rsiValue && tfState.rsiValue <= 15) {
+    case "15m":
+    case "1h":
+    case "4h": {
+      if (
+        tfState.rsiValue &&
+        (tfState.rsiValue < 30 || tfState.rsiValue > 70)
+      ) {
         try {
-          await lucaWebhook(`${eventSymbol} - RSI ${tfState.rsiValue}`);
+          await lucaWebhook({
+            name: eventSymbol,
+            rsi: tfState.rsiValue,
+            ema: currentEMA,
+            date: new Date(eventTime),
+          });
         } catch {}
       }
       break;
     }
   }
 
-  if (!tfState.rsiValue || tfState.rsiValue > 30) return;
+  //   if (!tfState.rsiValue || tfState.rsiValue > 30) return;
   //   console.log(tfState);
   //   const lastCoinHistoric = await SupabaseCoinRepository.getLastCoinHistoric(
   //     eventSymbol,
