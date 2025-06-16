@@ -321,6 +321,7 @@ const handleKlineData = async (klinePayload: KlineEvent): Promise<void> => {
             rsi: tfState.rsiValue,
             ema: currentEMA,
             date: new Date(eventTime),
+            interval: interval,
           });
         } catch {}
       }

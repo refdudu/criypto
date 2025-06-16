@@ -5,6 +5,7 @@ export const lucaWebhook = async (body: {
   rsi: number;
   ema: number;
   date: Date;
+  interval: string;
 }) => {
   try {
     const response = await fetch(process.env.LUCA_WEBHOOK_URL || "", {
@@ -16,7 +17,7 @@ export const lucaWebhook = async (body: {
     });
     const data = await response.json();
     console.log(data);
-  } catch(error) {
+  } catch (error) {
     console.error("Error sending webhook:", error);
   }
 };
