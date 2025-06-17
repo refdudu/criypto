@@ -1,6 +1,7 @@
 // ./app.ts
 
 import Binance from "node-binance-api";
+import express from "express";
 import {
   BinanceDailyStat,
   BinancePrevDayResponse,
@@ -83,6 +84,23 @@ async function getTopGainersFromBinance(
 }
 
 const main = async () => {
+  const app = express();
+  app.use(express.json());
+
+  app.get("/:symbol", async (req, res) => {
+    const { symbol } = req.params;
+    await lucaWebhook({
+      name: symbol,
+      rsi: 28,
+      ema: 200,
+      date: new Date(),
+      interval: "1h",
+    });
+    res.status(200).send(indicatorStates);
+  });
+  const port = process.env.API_PORT || 3000;
+  const listener = app.listen(port, () => console.log(listener.address()));
+  
   const binance = new Binance({
     APIKEY: process.env.BINANCE_API_KEY,
     APISECRET: process.env.BINANCE_API_SECRET,
