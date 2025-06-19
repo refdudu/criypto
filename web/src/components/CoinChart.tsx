@@ -9,15 +9,72 @@ import {
   ResponsiveContainer,
   //   Brush,
 } from "recharts";
-import type { CoinHistoric } from "../services/supabase/SupabaseCoinService";
+import type {
+  Coin,
+  CoinHistoric,
+} from "../services/supabase/SupabaseCoinService";
+import { createPortal } from "react-dom";
+import classNames from "classnames";
+import { use, useEffect } from "react";
+import { useCoinContext } from "../contexts/CoinContext";
 
-export const DrawerCoinChart = () => {
-  return (
-    <div className="fixed top-0 left-0 right-0 z-50 flex">
-      <div className="flex-1 bg-black opacity-60 cursor-pointer"/>
-      <div className="w-full flex items-center justify-center max-w-[900px] h-screen bg-gray-800 p-4">
-        <CoinChart data={[]} />
+interface DrawerCoinChartProps {
+  selectedCoin: Coin | null;
+  onClose: () => void;
+}
+export const DrawerCoinChart = ({
+  selectedCoin,
+  onClose,
+}: DrawerCoinChartProps) => {
+  //   if (!isVisible) return null;
+
+  const isVisible = !!selectedCoin;
+  return createPortal(
+    <div
+      className={classNames("fixed top-0 left-0 right-0 z-50 flex", {
+        "pointer-events-none": !isVisible,
+      })}
+    >
+      <button
+        type="button"
+        className={classNames(
+          "flex-1 bg-black cursor-pointer transition-opacity",
+          {
+            "opacity-40 delay-100 duration-100": isVisible,
+            "opacity-0 pointer-events-none": !isVisible,
+          }
+        )}
+        onClick={onClose}
+      />
+      <div
+        className={classNames(
+          "w-full flex items-center justify-center max-w-[900px] h-screen bg-gray-800 p-4 transition duration-100",
+          {
+            "opacity-100 translate-x-0": isVisible,
+            "opacity-0 pointer-events-none translate-x-full": !isVisible,
+          }
+        )}
+      >
+        {isVisible && <DrawerContent selectedCoin={selectedCoin} />}
       </div>
+    </div>,
+    document.body
+  );
+};
+
+const DrawerContent = ({ selectedCoin }: { selectedCoin: Coin }) => {
+//   useEffect(() => {
+//     console.log("DrawerContent mounted");
+//     return () => {
+//       console.log("DrawerContent unmounted");
+//       // Cleanup logic if needed
+//     };   
+//   }, []);
+
+  return (
+    <div className="w-full h-full flex-col flex ">
+      <span>{selectedCoin.id}</span>
+      <CoinChart data={[]} />
     </div>
   );
 };

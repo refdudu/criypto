@@ -1,7 +1,7 @@
 import moment from "moment";
 import { useCoinContext } from "../contexts/CoinContext";
 import classNames from "classnames";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type Dispatch } from "react";
 import type {
   Coin,
   CoinHistoric,
@@ -10,7 +10,7 @@ import type {
 export const HomePage = () => {
   const [type, setType] = useState<"coins" | "alerts">("coins");
   const [inputText, setInputText] = useState("");
-  const { coins, rsiHistoric } = useCoinContext();
+  const { coins, rsiHistoric, setSelectedCoin } = useCoinContext();
 
   const { _coins, _rsiHistoric } = useMemo(() => {
     const _coins = coins.filter((coin) => {
@@ -66,21 +66,30 @@ export const HomePage = () => {
           </button>
         </div>
       </header>
-      {type === "coins" && <CoinsData coins={_coins} />}
+      {type === "coins" && (
+        <CoinsData coins={_coins} setSelectedCoin={setSelectedCoin} />
+      )}
       {type === "alerts" && <RSIData rsiHistoric={_rsiHistoric} />}
     </div>
   );
 };
-const CoinsData = ({ coins }: { coins: Coin[] }) => {
+const CoinsData = ({
+  coins,
+  setSelectedCoin,
+}: {
+  coins: Coin[];
+  setSelectedCoin: Dispatch<React.SetStateAction<Coin | null>>;
+}) => {
   return (
     <div className="grid h-[calc(100vh-4rem)] overflow-y-auto grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 p-4">
       {coins.map((coin) => (
-        <div
+        <button
+          type="button"
           className={
             "p-4 flex-1  justify-center flex flex-col hover:bg-gray-600"
           }
           key={coin.id}
-          onClick={() => {}}
+          onClick={() => setSelectedCoin(coin)}
         >
           <span className="">{coin.id}</span>
           <span className="text-sm text-gray-300">
@@ -111,7 +120,7 @@ const CoinsData = ({ coins }: { coins: Coin[] }) => {
               </span>
             </div>
           ))}
-        </div>
+        </button>
       ))}
     </div>
   );
@@ -167,8 +176,7 @@ interface RSIHistoricItemProps {
   historic: CoinHistoric;
 }
 const CardRSIItem = ({ historic }: RSIHistoricItemProps) => {
-  console.log("🚀 ~ CardRSIItem ~ historic:", historic);
-  const isHigh = historic.closePrice > historic.emaValue;
+  const isHigh = historic.emaValue && historic.closePrice > historic.emaValue;
   return (
     <div
       className={classNames("p-4 flex-1  justify-center flex flex-col", {

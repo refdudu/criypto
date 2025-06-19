@@ -10,7 +10,7 @@ export type DataSymbolsState = Record<
   Record<string, SymbolTimeframeIndicatorState>
 >;
 
-export interface CoinHistoric {
+export interface CoinHistoricSupabase {
   id: string;
   interval: string;
   symbol: string;
@@ -47,7 +47,7 @@ async function loadInitialStateForAllSymbols(
     );
     throw error;
   }
-  const data = _data as CoinHistoric[];
+  const data = _data as CoinHistoricSupabase[];
   if (!data || data.length === 0) {
     throw new Error(
       "Nenhum dado histórico encontrado para os símbolos e intervalos fornecidos."

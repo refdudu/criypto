@@ -18,7 +18,7 @@ export interface CoinHistoric {
   interval: string;
   coinId: string;
   closePrice: number;
-  emaValue: number;
+  emaValue: number | null;
   highPrice: number;
   lowPrice: number;
   openPrice: number;
