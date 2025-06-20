@@ -104,7 +104,7 @@ const CoinsData = ({
 
           {coin.intervals.map((interval) => (
             <div
-              key={interval.timestamp}
+              key={`${interval.timestamp}_${interval.interval}_${coin.id}`}
               className={classNames(
                 {
                   "bg-red-600": interval.rsiValue && interval.rsiValue < 35,

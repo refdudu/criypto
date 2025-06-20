@@ -23,25 +23,30 @@ const CoinContext = createContext(
 
 export const CoinProvider = ({ children }: { children: React.ReactNode }) => {
   const [coins, setCoins] = useState<Coin[]>([]);
-  const [rsiHistoric, setRciHistoric] = useState<CoinHistoric[]>([]);
+  const [rsiHistoric, setRsiHistoric] = useState<CoinHistoric[]>([]);
   const [selectedCoin, setSelectedCoin] = useState<Coin | null>(null);
   //   const [selectedCoin, setSelectedCoin] = useState("");
 
   useEffect(() => {
-    const get = async () => {
+    const getHistoric = async () => {
+      const historicData = await SupabaseCoinService.getCoinLastInterval();
+      setRsiHistoric(historicData);
+    };
+    const getCoins = async () => {
       const coins = await SupabaseCoinService.getCoins();
       setCoins(coins);
-      const data = await SupabaseCoinService.getIntervalsAlert();
-      setRciHistoric(data);
     };
-    get();
+
+    getCoins();
+    getHistoric();
 
     const rsiAlertChannel = SupabaseCoinService.watchIntervals(
-      setRciHistoric,
+      setRsiHistoric,
       setCoins
     );
+
     return () => {
-      setRciHistoric([]);
+      setRsiHistoric([]);
       setCoins([]);
       if (rsiAlertChannel) rsiAlertChannel.unsubscribe();
     };

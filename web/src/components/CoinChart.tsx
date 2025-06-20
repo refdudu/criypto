@@ -15,8 +15,6 @@ import type {
 } from "../services/supabase/SupabaseCoinService";
 import { createPortal } from "react-dom";
 import classNames from "classnames";
-import { use, useEffect } from "react";
-import { useCoinContext } from "../contexts/CoinContext";
 
 interface DrawerCoinChartProps {
   selectedCoin: Coin | null;
@@ -48,7 +46,7 @@ export const DrawerCoinChart = ({
       />
       <div
         className={classNames(
-          "w-full flex items-center justify-center max-w-[900px] h-screen bg-gray-800 p-4 transition duration-100",
+          "w-full flex items-center justify-center max-w-[50%] h-screen bg-gray-800 p-4 transition duration-100",
           {
             "opacity-100 translate-x-0": isVisible,
             "opacity-0 pointer-events-none translate-x-full": !isVisible,
@@ -63,13 +61,13 @@ export const DrawerCoinChart = ({
 };
 
 const DrawerContent = ({ selectedCoin }: { selectedCoin: Coin }) => {
-//   useEffect(() => {
-//     console.log("DrawerContent mounted");
-//     return () => {
-//       console.log("DrawerContent unmounted");
-//       // Cleanup logic if needed
-//     };   
-//   }, []);
+  //   useEffect(() => {
+  //     console.log("DrawerContent mounted");
+  //     return () => {
+  //       console.log("DrawerContent unmounted");
+  //       // Cleanup logic if needed
+  //     };
+  //   }, []);
 
   return (
     <div className="w-full h-full flex-col flex ">

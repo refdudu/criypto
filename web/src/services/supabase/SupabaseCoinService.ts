@@ -1,9 +1,8 @@
-// src/services/CoinService.ts
-import { supabase } from "./config"; // Seu cliente Supabase
+import { supabase } from "./config";
 import type { Dispatch, SetStateAction } from "react";
 
 export interface Coin {
-  id: string; // O nome do símbolo, ex: 'BTCUSDT'
+  id: string;
   closePrice: number;
   emaValue: number;
   highPrice: number;
@@ -67,25 +66,17 @@ const getCoinLastInterval = async (): Promise<CoinHistoric[]> => {
 };
 
 export const SupabaseCoinService = {
-  /**
-   * Busca os dados iniciais das moedas e inicia uma escuta em tempo real para atualizações.
-   * @param setCoins A função de estado do React para atualizar a lista de moedas.
-   * @returns A inscrição do canal em tempo real para que possa ser cancelada depois.
-   */
   getCoins: async (): Promise<Coin[]> => {
-    // 1. Busca inicial dos dados
     const { data: initialData, error } = await supabase
       .from("symbols")
       .select("*")
       .order("last_timestamp", { ascending: false });
-    //   .limit(50);
 
     if (error) {
       console.error("Error fetching initial coins:", error);
       return [];
     }
     const data = await getCoinLastInterval();
-    console.log("🚀 ~ getCoins: ~ data:", data);
 
     if (initialData) {
       const initialCoins = initialData.map((x) => mapSupabaseToCoin(x, data));
@@ -94,37 +85,10 @@ export const SupabaseCoinService = {
     return [];
   },
   getCoinLastInterval,
-  //   watchCoins: (setCoins: Dispatch<SetStateAction<Coin[]>>) => {
-  //     const channel = supabase
-  //       .channel("custom-all-channel")
-  //       .on(
-  //         "postgres_changes",
-  //         { event: "*", schema: "public", table: "symbols" },
-  //         (payload) => {
-  //           const updatedCoin = mapSupabaseToCoin(payload.new, []);
-  //           setCoins((prevCoins) => {
-  //             const existingCoinIndex = prevCoins.find(
-  //               (coin) => coin.id === updatedCoin.id
-  //             );
-  //             if (existingCoinIndex) {
-  //               return prevCoins.map((coin) =>
-  //                 coin.id === updatedCoin.id ? updatedCoin : coin
-  //               );
-  //             } else {
-  //               return [...prevCoins, updatedCoin];
-  //             }
-  //           });
-  //         }
-  //       )
-  //       .subscribe();
-
-  //     return channel;
-  //   },
   getIntervalsAlert: async (): Promise<CoinHistoric[]> => {
     const { data, error } = await supabase
       .from("market_data")
       .select("rsi_value,timestamp,symbol,interval,close_price,ema_value")
-      .not("interval", "eq", "1m")
       .or("rsi_value.lt.35,rsi_value.gt.70")
       .limit(200)
       .order("timestamp", { ascending: false });
@@ -138,7 +102,7 @@ export const SupabaseCoinService = {
   },
 
   watchIntervals: (
-    setRciHistoric: Dispatch<SetStateAction<CoinHistoric[]>>,
+    setRsiHistoric: Dispatch<SetStateAction<CoinHistoric[]>>,
     setCoins: Dispatch<SetStateAction<Coin[]>>
   ) => {
     console.log("watch");
@@ -180,12 +144,10 @@ export const SupabaseCoinService = {
             return;
 
           const historicData = mapCoinHistoric(newData);
-          setRciHistoric((p) => [historicData, ...p]);
+          setRsiHistoric((p) => [historicData, ...p]);
         }
       )
-      .subscribe((x) => {
-        console.log(x);
-      }, 999999);
+      .subscribe(console.log);
 
     return channel;
   },
