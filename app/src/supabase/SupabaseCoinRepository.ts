@@ -127,6 +127,49 @@ async function getLastCoinHistoric(
     timestamp: data.timestamp,
   };
 }
+async function getIsSended(
+  symbol: string,
+  interval: string
+): Promise<HistoricalKlineData | null> {
+  // Calcula o timestamp de 4 horas atrás
+  const fourHoursAgo = new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString();
+
+  const { data, error } = await supabase
+    .from("market_data")
+    .select(
+      "ema_value, rsi_value, close_price, open_price, high_price, low_price, timestamp"
+    )
+    .eq("symbol", symbol)
+    .eq("interval", interval)
+    .gte("timestamp", fourHoursAgo)
+    .or("rsi_value.gt.70,rsi_value.lt.30")
+    .order("timestamp", { ascending: false })
+    .limit(1)
+    .single();
+
+  if (error) {
+    if (error.code === "PGRST116" || error.message?.includes("No rows")) {
+      return null;
+    }
+    console.error(
+      `Error loading data for ${symbol}@${interval} from Supabase:`,
+      error
+    );
+    throw error;
+  }
+  if (!data) {
+    return null;
+  }
+  return {
+    emaValue: data.ema_value,
+    rsiValue: data.rsi_value,
+    closePrice: data.close_price,
+    openPrice: data.open_price,
+    highPrice: data.high_price,
+    lowPrice: data.low_price,
+    timestamp: data.timestamp,
+  };
+}
 
 async function saveSymbolIntervalDataToSupabase(
   symbol: string,
@@ -232,5 +275,6 @@ export const SupabaseCoinRepository = {
   getSymbolObserve,
   loadInitialStateForAllSymbols,
   getLastCoinHistoric,
-//   getSymbols
+  getIsSended,
+  //   getSymbols
 };

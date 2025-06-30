@@ -160,7 +160,12 @@ const main = async () => {
         console.error(`Falha ao conectar ao WebSocket após várias tentativas.`);
         return;
       }
-      binance.websockets.subscribe(stream, callback, () => listen(tries + 1), () => true);
+      binance.websockets.subscribe(
+        stream,
+        callback,
+        () => listen(tries + 1),
+        () => true
+      );
     };
     listen(0);
   });
@@ -318,16 +323,14 @@ const handleKlineData = async (klinePayload: KlineEvent): Promise<void> => {
   };
 
   try {
-    // await SupabaseCoinRepository.saveSymbolIntervalData(
-    //   eventSymbol,
-    //   interval,
-    //   klineDataForHistory
-    // );
+    await SupabaseCoinRepository.saveSymbolIntervalData(
+      eventSymbol,
+      interval,
+      klineDataForHistory
+    );
   } catch {}
   //   console.log(tfState);
 
-  
-  
   switch (interval) {
     case "15m":
     case "1h":
@@ -336,6 +339,12 @@ const handleKlineData = async (klinePayload: KlineEvent): Promise<void> => {
         tfState.rsiValue &&
         (tfState.rsiValue < 30 || tfState.rsiValue > 70)
       ) {
+        const isSended = await SupabaseCoinRepository.getIsSended(
+          eventSymbol,
+          interval
+        );
+        if (isSended) return;
+        console.log('enviando alerta para', eventSymbol, interval);
         const id = CoinMap[eventSymbol];
         if (!id) return;
         try {
