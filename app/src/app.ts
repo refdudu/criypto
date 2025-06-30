@@ -79,7 +79,7 @@ async function getTopGainersFromBinance(
   }
 }
 
-const main = async () => {
+const server = () => {
   const app = express();
   app.use(express.json());
 
@@ -100,7 +100,9 @@ const main = async () => {
 
   const port = process.env.API_PORT || 3000;
   const listener = app.listen(port, () => console.log(listener.address()));
+};
 
+const binanceStart = async () => {
   const binance = new Binance({
     APIKEY: process.env.BINANCE_API_KEY,
     APISECRET: process.env.BINANCE_API_SECRET,
@@ -109,7 +111,6 @@ const main = async () => {
 
   const symbolsToMonitor = await getTopGainersFromBinance(
     binance,
-    // config.dynamicSymbols.topNGainers,
     config.dynamicSymbols.quoteAsset,
     config.dynamicSymbols.minVolume24h
   );
@@ -119,10 +120,10 @@ const main = async () => {
     return;
   }
 
-  console.log(
-    "SÍMBOLOS MONITORADOS NESTA SESSÃO:",
-    symbolsToMonitor.join(", ")
-  );
+  //   console.log(
+  //     "SÍMBOLOS MONITORADOS NESTA SESSÃO:",
+  //     symbolsToMonitor.join(", ")
+  //   );
 
   indicatorStates = await SupabaseCoinRepository.loadInitialStateForAllSymbols(
     symbolsToMonitor,
@@ -136,7 +137,7 @@ const main = async () => {
     )
   );
 
-  console.log(`Iniciando monitoramento para ${streams.length} streams...`);
+  //   console.log(`Iniciando monitoramento para ${streams.length} streams...`);
 
   streams.forEach(async (stream, index) => {
     const callback = (klineEventData: KlineEvent) => {
@@ -165,32 +166,34 @@ const main = async () => {
     listen(0);
   });
 
-  binance.websockets.prevDay(
-    symbolsToMonitor,
-    async (_error: any, data: BinancePrevDayResponse) => {
-      //   if (parseFloat(data.quoteVolume) < 10000000) return;
-      const percent = parseFloat(data.percentChange);
-      if (percent < 20) return;
-      // cria registro de variação maior de 20% para caso um RSI menor que 30 nos intervalos de 5m, 15m e 1h aparecer
-      // se ja tiver registro da moeda deve ignorar
+  //   binance.websockets.prevDay(
+  //     symbolsToMonitor,
+  //     async (_error: any, data: BinancePrevDayResponse) => {
+  //       //   if (parseFloat(data.quoteVolume) < 10000000) return;
+  //       const percent = parseFloat(data.percentChange);
+  //       if (percent < 20) return;
+  //       // cria registro de variação maior de 20% para caso um RSI menor que 30 nos intervalos de 5m, 15m e 1h aparecer
+  //       // se ja tiver registro da moeda deve ignorar
 
-      try {
-        const isObservable = await SupabaseCoinRepository.getSymbolObserve(
-          data.symbol
-        );
-        if (isObservable) return;
-        await SupabaseCoinRepository.createSymbolObserve(data.symbol);
-        console.log(data.percentChange, data.symbol);
-      } catch (e) {
-        console.log(e);
-      }
-    }
-  );
+  //       try {
+  //         const isObservable = await SupabaseCoinRepository.getSymbolObserve(
+  //           data.symbol
+  //         );
+  //         if (isObservable) return;
+  //         await SupabaseCoinRepository.createSymbolObserve(data.symbol);
+  //         console.log(data.percentChange, data.symbol);
+  //       } catch (e) {
+  //         console.log(e);
+  //       }
+  //     }
+  //   );
 };
 
-/**
- * Manipula cada evento de kline, calcula os indicadores e salva no banco de dados.
- */
+const main = async () => {
+  server();
+  binanceStart();
+};
+
 const handleKlineData = async (klinePayload: KlineEvent): Promise<void> => {
   const { s: eventSymbol, k: kline, E: eventTime } = klinePayload;
   if (!kline.x) return;
@@ -293,19 +296,6 @@ const handleKlineData = async (klinePayload: KlineEvent): Promise<void> => {
       config.emaPeriod
     }): ${currentEMA.toFixed(4)}`
   );
-  //   if (tfState.rsiValue !== null) {
-  //     console.log(
-  //       `[${eventSymbol}@${interval}] RSI(${
-  //         config.rsiPeriod
-  //       }): ${tfState.rsiValue.toFixed(2)}`
-  //     );
-  //   } else {
-  //     console.log(
-  //       `[${eventSymbol}@${interval}] RSI: Aguardando mais dados (${
-  //         tfState.closePrices.length
-  //       }/${config.rsiPeriod + 1} velas)`
-  //     );
-  //   }
 
   const klineDataForHistory: HistoricalKlineData = {
     closePrice: closePrice,
@@ -324,7 +314,6 @@ const handleKlineData = async (klinePayload: KlineEvent): Promise<void> => {
     //   klineDataForHistory
     // );
   } catch {}
-  //   console.log(tfState);
 
   switch (interval) {
     case "15m":
@@ -334,6 +323,12 @@ const handleKlineData = async (klinePayload: KlineEvent): Promise<void> => {
         tfState.rsiValue &&
         (tfState.rsiValue < 30 || tfState.rsiValue > 70)
       ) {
+        const isSended = await SupabaseCoinRepository.getIsSended(
+          eventSymbol,
+          interval
+        );
+        if (isSended) return;
+        console.log("enviando alerta para", eventSymbol, interval);
         const id = CoinMap[eventSymbol];
         if (!id) return;
         try {

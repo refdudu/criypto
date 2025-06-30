@@ -29,8 +29,6 @@ async function loadInitialStateForAllSymbols(
   limit: number
 ): Promise<DataSymbolsState> {
   console.log(`Buscando dados iniciais para ${symbols.length} símbolos...`);
-
-  //
   const { data: _data, error } = await supabase.rpc(
     "get_latest_market_data_for_symbols",
     {
@@ -192,44 +190,10 @@ async function createSymbolObserve(symbol: string): Promise<void> {
 
   console.log(`Symbol ${symbol} is now being observed.`);
 }
-async function getSymbolObserve(symbol: string): Promise<boolean> {
-  const response = await supabase
-    .from("symbols_observe")
-    .select("*")
-    // .eq("symbol", symbol)
-    .eq("status", ObserveSymbolStatusEnum.observing)
-    .limit(1)
-    .single();
-
-  if (!response.error && response.data) return true;
-  return false;
-}
-
-// export interface Coin {
-//   id: string;
-//   closePrice: number;
-//   emaValue: number;
-//   highPrice: number;
-//   lowPrice: number;
-//   openPrice: number;
-//   rsiValue: number;
-//   timestamp: string;
-// //   intervals: CoinHistoric[];
-// }
-// async function getSymbols(): Promise<string[]> {
-//   const response = await supabase
-//     .from("symbols")
-//     .select("symbol")
-
-//   if (!response.error && response.data) return response.data.map((coin) => coin.symbol);
-//   return [];
-// }
 
 export const SupabaseCoinRepository = {
-  //   loadSymbolIntervalData: loadSymbolIntervalDataFromSupabase,
   saveSymbolIntervalData: saveSymbolIntervalDataToSupabase,
   createSymbolObserve,
-  getSymbolObserve,
   loadInitialStateForAllSymbols,
   getLastCoinHistoric,
 //   getSymbols
