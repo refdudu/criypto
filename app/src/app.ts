@@ -1,5 +1,3 @@
-// ./app.ts
-
 import Binance from "node-binance-api";
 import express from "express";
 import {
@@ -15,11 +13,9 @@ import {
   SupabaseCoinRepository,
 } from "./supabase/SupabaseCoinRepository";
 import { lucaWebhook } from "./lucaWebhook";
-// import { SupabaseCoinRepository, HistoricalKlineData } from "./SupabaseCoinRepository";
+import { CoinMap } from "./coinMap";
 
-// --- Configurações Simplificadas ---
 export const config = {
-  // Mantive a busca dinâmica de símbolos, você pode desabilitar se quiser
   dynamicSymbols: {
     enabled: true,
     topNGainers: 100,
@@ -90,7 +86,7 @@ const main = async () => {
   app.get("/:symbol", async (req, res) => {
     const { symbol } = req.params;
     await lucaWebhook({
-      name: symbol,
+      id: symbol,
       rsi: 28,
       ema: 200,
       date: new Date(),
@@ -98,9 +94,13 @@ const main = async () => {
     });
     res.status(200).send(indicatorStates);
   });
+  app.get("/", async (req, res) => {
+    res.status(200).send("ok");
+  });
+
   const port = process.env.API_PORT || 3000;
   const listener = app.listen(port, () => console.log(listener.address()));
-  
+
   const binance = new Binance({
     APIKEY: process.env.BINANCE_API_KEY,
     APISECRET: process.env.BINANCE_API_SECRET,
@@ -152,16 +152,17 @@ const main = async () => {
 
     // console.log("Tentando conectar ao WebSocket...");
     await new Promise((resolve) =>
-      setTimeout(() => resolve(true), 1000 * index)
+      setTimeout(() => resolve(true), 100 * index)
     );
     console.log(`${stream} iniciado.`);
-
-    binance.websockets.subscribe(
-      stream,
-      callback,
-      () => true,
-      () => true
-    );
+    const listen = (tries: number) => {
+      if (tries > 10) {
+        console.error(`Falha ao conectar ao WebSocket após várias tentativas.`);
+        return;
+      }
+      binance.websockets.subscribe(stream, callback, () => listen(tries + 1), () => true);
+    };
+    listen(0);
   });
 
   binance.websockets.prevDay(
@@ -317,11 +318,11 @@ const handleKlineData = async (klinePayload: KlineEvent): Promise<void> => {
   };
 
   try {
-    await SupabaseCoinRepository.saveSymbolIntervalData(
-      eventSymbol,
-      interval,
-      klineDataForHistory
-    );
+    // await SupabaseCoinRepository.saveSymbolIntervalData(
+    //   eventSymbol,
+    //   interval,
+    //   klineDataForHistory
+    // );
   } catch {}
   //   console.log(tfState);
 
@@ -333,9 +334,11 @@ const handleKlineData = async (klinePayload: KlineEvent): Promise<void> => {
         tfState.rsiValue &&
         (tfState.rsiValue < 30 || tfState.rsiValue > 70)
       ) {
+        const id = CoinMap[eventSymbol];
+        if (!id) return;
         try {
           await lucaWebhook({
-            name: eventSymbol,
+            id,
             rsi: tfState.rsiValue,
             ema: currentEMA,
             date: new Date(eventTime),

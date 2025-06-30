@@ -1,7 +1,7 @@
 import "dotenv/config";
 
 export const lucaWebhook = async (body: {
-  name: string;
+  id: string;
   rsi: number;
   ema: number;
   date: Date;

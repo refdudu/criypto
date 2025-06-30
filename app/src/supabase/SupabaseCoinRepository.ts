@@ -205,6 +205,26 @@ async function getSymbolObserve(symbol: string): Promise<boolean> {
   return false;
 }
 
+// export interface Coin {
+//   id: string;
+//   closePrice: number;
+//   emaValue: number;
+//   highPrice: number;
+//   lowPrice: number;
+//   openPrice: number;
+//   rsiValue: number;
+//   timestamp: string;
+// //   intervals: CoinHistoric[];
+// }
+// async function getSymbols(): Promise<string[]> {
+//   const response = await supabase
+//     .from("symbols")
+//     .select("symbol")
+
+//   if (!response.error && response.data) return response.data.map((coin) => coin.symbol);
+//   return [];
+// }
+
 export const SupabaseCoinRepository = {
   //   loadSymbolIntervalData: loadSymbolIntervalDataFromSupabase,
   saveSymbolIntervalData: saveSymbolIntervalDataToSupabase,
@@ -212,4 +232,5 @@ export const SupabaseCoinRepository = {
   getSymbolObserve,
   loadInitialStateForAllSymbols,
   getLastCoinHistoric,
+//   getSymbols
 };
