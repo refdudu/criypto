@@ -59,7 +59,7 @@ const getCoinLastInterval = async (): Promise<CoinHistoric[]> => {
     console.error("Error fetching interval alerts:", error);
     return [];
   }
-  const order = ["1m", "5m", "15m", "30m", "1h", "4h", "1d"];
+  const order = ["5m", "15m", "30m", "1h", "4h", "1d"];
   return data.map(mapCoinHistoric).sort((a: CoinHistoric, b: CoinHistoric) => {
     return order.indexOf(a.interval) - order.indexOf(b.interval);
   });

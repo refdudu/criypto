@@ -29,7 +29,7 @@ export const CoinProvider = ({ children }: { children: React.ReactNode }) => {
 
   useEffect(() => {
     const getHistoric = async () => {
-      const historicData = await SupabaseCoinService.getCoinLastInterval();
+      const historicData = await SupabaseCoinService.getIntervalsAlert();
       setRsiHistoric(historicData);
     };
     const getCoins = async () => {

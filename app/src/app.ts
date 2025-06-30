@@ -87,8 +87,8 @@ const main = async () => {
     const { symbol } = req.params;
     await lucaWebhook({
       id: symbol,
-      rsi: 28,
-      ema: 200,
+      rsi: 30,
+      ema: 107000,
       date: new Date(),
       interval: "1h",
     });
@@ -326,6 +326,8 @@ const handleKlineData = async (klinePayload: KlineEvent): Promise<void> => {
   } catch {}
   //   console.log(tfState);
 
+  
+  
   switch (interval) {
     case "15m":
     case "1h":
