@@ -196,5 +196,6 @@ export const SupabaseCoinRepository = {
   createSymbolObserve,
   loadInitialStateForAllSymbols,
   getLastCoinHistoric,
-//   getSymbols
+  //   getIsSended,
+  //   getSymbols
 };

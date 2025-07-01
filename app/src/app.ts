@@ -95,7 +95,18 @@ const server = () => {
     res.status(200).send(indicatorStates);
   });
   app.get("/", async (req, res) => {
-    res.status(200).send("ok");
+    const data = Object.entries(indicatorStates)
+      .map(([symbol, intervals]) => ({
+        symbol,
+        intervals: Object.keys(intervals),
+      }))
+      .flatMap(({ intervals, symbol }) =>
+        intervals.map((interval) => ({
+          symbol,
+          interval,
+        }))
+      );
+    res.status(200).send(data);
   });
 
   const port = process.env.API_PORT || 3000;
@@ -120,24 +131,18 @@ const binanceStart = async () => {
     return;
   }
 
-  //   console.log(
-  //     "SÍMBOLOS MONITORADOS NESTA SESSÃO:",
-  //     symbolsToMonitor.join(", ")
-  //   );
-
   indicatorStates = await SupabaseCoinRepository.loadInitialStateForAllSymbols(
     symbolsToMonitor,
     config.intervals,
     config.historyFetchLimit
   );
+  return;
 
   const streams = symbolsToMonitor.flatMap((symbol) =>
     config.intervals.map(
       (interval) => `${symbol.toLowerCase()}@kline_${interval}`
     )
   );
-
-  //   console.log(`Iniciando monitoramento para ${streams.length} streams...`);
 
   streams.forEach(async (stream, index) => {
     const callback = (klineEventData: KlineEvent) => {
@@ -150,8 +155,6 @@ const binanceStart = async () => {
         );
       }
     };
-
-    // console.log("Tentando conectar ao WebSocket...");
     await new Promise((resolve) =>
       setTimeout(() => resolve(true), 100 * index)
     );
@@ -161,7 +164,12 @@ const binanceStart = async () => {
         console.error(`Falha ao conectar ao WebSocket após várias tentativas.`);
         return;
       }
-      binance.websockets.subscribe(stream, callback, () => listen(tries + 1), () => true);
+      binance.websockets.subscribe(
+        stream,
+        callback,
+        () => listen(tries + 1),
+        () => true
+      );
     };
     listen(0);
   });
@@ -277,11 +285,9 @@ const handleKlineData = async (klinePayload: KlineEvent): Promise<void> => {
         config.rsiPeriod;
     }
 
-    // Armazena as novas médias para o próximo cálculo
     tfState.previousAverageGain = avgGain;
     tfState.previousAverageLoss = avgLoss;
 
-    // Calcula o valor final do RSI
     if (avgLoss === 0) {
       tfState.rsiValue = 100;
     } else {
@@ -290,7 +296,6 @@ const handleKlineData = async (klinePayload: KlineEvent): Promise<void> => {
     }
   }
 
-  // Log dos indicadores calculados
   console.log(
     `[${eventSymbol}@${interval}] EMA(${
       config.emaPeriod
@@ -308,57 +313,46 @@ const handleKlineData = async (klinePayload: KlineEvent): Promise<void> => {
   };
 
   try {
-    // await SupabaseCoinRepository.saveSymbolIntervalData(
-    //   eventSymbol,
-    //   interval,
-    //   klineDataForHistory
-    // );
+    await SupabaseCoinRepository.saveSymbolIntervalData(
+      eventSymbol,
+      interval,
+      klineDataForHistory
+    );
+    sendWebhook(eventSymbol, tfState, currentEMA, eventTime, interval).catch(
+      (e) =>
+        console.error(
+          `Erro ao enviar webhook para ${eventSymbol}@${interval}:`,
+          e
+        )
+    );
   } catch {}
+};
 
-  switch (interval) {
-    case "15m":
-    case "1h":
-    case "4h": {
-      if (
-        tfState.rsiValue &&
-        (tfState.rsiValue < 30 || tfState.rsiValue > 70)
-      ) {
-        const isSended = await SupabaseCoinRepository.getIsSended(
-          eventSymbol,
-          interval
-        );
-        if (isSended) return;
-        console.log("enviando alerta para", eventSymbol, interval);
-        const id = CoinMap[eventSymbol];
-        if (!id) return;
-        try {
-          await lucaWebhook({
-            id,
-            rsi: tfState.rsiValue,
-            ema: currentEMA,
-            date: new Date(eventTime),
-            interval: interval,
-          });
-        } catch {}
-      }
-      break;
-    }
+const sendWebhook = async (
+  eventSymbol: string,
+  tfState: SymbolTimeframeIndicatorState,
+  currentEMA: number,
+  eventTime: number,
+  interval: string
+) => {
+  const intervals = ["15m", "1h", "4h"];
+  if (!intervals.includes(interval)) return;
+
+  if (!tfState.rsiValue || (tfState.rsiValue >= 30 && tfState.rsiValue <= 70)) {
+    return;
   }
+  const isSended = true;
+  if (isSended) return;
+  const id = CoinMap[eventSymbol];
+  if (!id) return;
 
-  //   if (!tfState.rsiValue || tfState.rsiValue > 30) return;
-  //   console.log(tfState);
-  //   const lastCoinHistoric = await SupabaseCoinRepository.getLastCoinHistoric(
-  //     eventSymbol,
-  //     interval
-  //   );
-  //   if (
-  //     !lastCoinHistoric.rsiValue ||
-  //     lastCoinHistoric.rsiValue < tfState.rsiValue
-  //   )
-  //     return;
-  //   console.log(
-  //     `RSI ${tfState.rsiValue} < 30 para ${eventSymbol}@${interval}. Salvando histórico.`
-  //   );
+  await lucaWebhook({
+    id,
+    rsi: tfState.rsiValue,
+    ema: currentEMA,
+    date: new Date(eventTime),
+    interval: interval,
+  });
 };
 
 main().catch((error) => {
