@@ -327,19 +327,24 @@ const handleKlineData = async (klinePayload: KlineEvent): Promise<void> => {
       interval,
       klineDataForHistory
     );
-    sendWebhook(eventSymbol, tfState, currentEMA, eventTime, interval).catch(
-      (e) =>
-        console.error(
-          `Erro ao enviar webhook para ${eventSymbol}@${interval}:`,
-          e
-        )
+    sendWebhook(
+      eventSymbol,
+      tfState.rsiValue,
+      currentEMA,
+      eventTime,
+      interval
+    ).catch((e) =>
+      console.error(
+        `Erro ao enviar webhook para ${eventSymbol}@${interval}:`,
+        e
+      )
     );
   } catch {}
 };
 
 const sendWebhook = async (
   eventSymbol: string,
-  tfState: SymbolTimeframeIndicatorState,
+  rsi: number | null,
   currentEMA: number,
   eventTime: number,
   interval: string
@@ -347,24 +352,29 @@ const sendWebhook = async (
   const intervals = ["15m", "1h", "4h"];
   if (!intervals.includes(interval)) return;
 
-  if (!tfState.rsiValue || (tfState.rsiValue >= 30 && tfState.rsiValue <= 70)) {
+  if (!rsi || (rsi >= 30 && rsi <= 70)) {
     return;
   }
-  const isSended = await SupabaseCoinRepository.checkRecentRsiAlerts(
-    eventSymbol,
-    interval
-  );
-  if (isSended) return;
-  const id = CoinMap[eventSymbol];
-  if (!id) return;
+  console.log("Verificando se deve enviar alerta", eventSymbol, interval);
+  try {
+    const isSended = await SupabaseCoinRepository.checkRecentRsiAlerts(
+      eventSymbol,
+      interval
+    ).catch(() => null);
+    console.log("Item do alerta", isSended);
+    if (isSended) return;
+    console.log("Enviando alerta", eventSymbol, interval);
+    const id = CoinMap[eventSymbol];
+    if (!id) return;
 
-  await lucaWebhook({
-    id,
-    rsi: tfState.rsiValue,
-    ema: currentEMA,
-    date: new Date(eventTime),
-    interval: interval,
-  });
+    await lucaWebhook({
+      id,
+      rsi,
+      ema: currentEMA,
+      date: new Date(eventTime),
+      interval: interval,
+    });
+  } catch {}
 };
 
 main().catch((error) => {
