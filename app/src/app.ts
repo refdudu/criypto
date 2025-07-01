@@ -85,13 +85,13 @@ const server = () => {
 
   app.get("/:symbol", async (req, res) => {
     const { symbol } = req.params;
-    await lucaWebhook({
-      id: symbol,
-      rsi: 28,
-      ema: 200,
-      date: new Date(),
-      interval: "1h",
-    });
+    // await lucaWebhook({
+    //   id: symbol,
+    //   rsi: 28,
+    //   ema: 200,
+    //   date: new Date(),
+    //   interval: "1h",
+    // });
     res.status(200).send(indicatorStates);
   });
   app.get("/", async (req, res) => {
@@ -106,6 +106,11 @@ const server = () => {
           interval,
         }))
       );
+    data.forEach((x) => {
+      SupabaseCoinRepository.checkRecentRsiAlerts(x.symbol, x.interval)
+        .then(console.log)
+        .catch(() => {});
+    });
     res.status(200).send(data);
   });
 

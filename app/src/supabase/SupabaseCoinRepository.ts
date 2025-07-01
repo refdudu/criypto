@@ -181,6 +181,23 @@ async function saveSymbolIntervalDataToSupabase(
     );
   }
 }
+async function checkRecentRsiAlerts(
+  symbol: string,
+  interval: string // NOVO PARÂMETRO
+): Promise<any> {
+  const { data, error } = await supabase.rpc("get_recent_rsi_alerts", {
+    p_symbol: symbol,
+    p_interval: interval, // NOVO PARÂMETRO
+  });
+
+  if (error) {
+    console.error("Erro ao chamar a função get_recent_rsi_alerts:", error);
+    throw error;
+  }
+  if (data.length === 0) throw error;
+  return data
+}
+
 async function createSymbolObserve(symbol: string): Promise<void> {
   const insertResponse = await supabase.from("symbols_observe").insert({
     symbol,
@@ -196,6 +213,5 @@ export const SupabaseCoinRepository = {
   createSymbolObserve,
   loadInitialStateForAllSymbols,
   getLastCoinHistoric,
-  //   getIsSended,
-  //   getSymbols
+  checkRecentRsiAlerts,
 };
