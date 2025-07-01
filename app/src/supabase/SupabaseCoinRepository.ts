@@ -29,8 +29,6 @@ async function loadInitialStateForAllSymbols(
   limit: number
 ): Promise<DataSymbolsState> {
   console.log(`Buscando dados iniciais para ${symbols.length} símbolos...`);
-
-  //
   const { data: _data, error } = await supabase.rpc(
     "get_latest_market_data_for_symbols",
     {
@@ -127,49 +125,49 @@ async function getLastCoinHistoric(
     timestamp: data.timestamp,
   };
 }
-async function getIsSended(
-  symbol: string,
-  interval: string
-): Promise<HistoricalKlineData | null> {
-  // Calcula o timestamp de 4 horas atrás
-  const fourHoursAgo = new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString();
+// async function getIsSended(
+//   symbol: string,
+//   interval: string
+// ): Promise<HistoricalKlineData | null> {
+//   // Calcula o timestamp de 4 horas atrás
+//   const fourHoursAgo = new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString();
 
-  const { data, error } = await supabase
-    .from("market_data")
-    .select(
-      "ema_value, rsi_value, close_price, open_price, high_price, low_price, timestamp"
-    )
-    .eq("symbol", symbol)
-    .eq("interval", interval)
-    .gte("timestamp", fourHoursAgo)
-    .or("rsi_value.gt.70,rsi_value.lt.30")
-    .order("timestamp", { ascending: false })
-    .limit(1)
-    .single();
+//   const { data, error } = await supabase
+//     .from("market_data")
+//     .select(
+//       "ema_value, rsi_value, close_price, open_price, high_price, low_price, timestamp"
+//     )
+//     .eq("symbol", symbol)
+//     .eq("interval", interval)
+//     .gte("timestamp", fourHoursAgo)
+//     .or("rsi_value.gt.70,rsi_value.lt.30")
+//     .order("timestamp", { ascending: false })
+//     .limit(1)
+//     .single();
 
-  if (error) {
-    if (error.code === "PGRST116" || error.message?.includes("No rows")) {
-      return null;
-    }
-    console.error(
-      `Error loading data for ${symbol}@${interval} from Supabase:`,
-      error
-    );
-    throw error;
-  }
-  if (!data) {
-    return null;
-  }
-  return {
-    emaValue: data.ema_value,
-    rsiValue: data.rsi_value,
-    closePrice: data.close_price,
-    openPrice: data.open_price,
-    highPrice: data.high_price,
-    lowPrice: data.low_price,
-    timestamp: data.timestamp,
-  };
-}
+//   if (error) {
+//     if (error.code === "PGRST116" || error.message?.includes("No rows")) {
+//       return null;
+//     }
+//     console.error(
+//       `Error loading data for ${symbol}@${interval} from Supabase:`,
+//       error
+//     );
+//     throw error;
+//   }
+//   if (!data) {
+//     return null;
+//   }
+//   return {
+//     emaValue: data.ema_value,
+//     rsiValue: data.rsi_value,
+//     closePrice: data.close_price,
+//     openPrice: data.open_price,
+//     highPrice: data.high_price,
+//     lowPrice: data.low_price,
+//     timestamp: data.timestamp,
+//   };
+// }
 
 async function saveSymbolIntervalDataToSupabase(
   symbol: string,
@@ -226,6 +224,23 @@ async function saveSymbolIntervalDataToSupabase(
     );
   }
 }
+async function checkRecentRsiAlerts(
+  symbol: string,
+  interval: string // NOVO PARÂMETRO
+): Promise<any> {
+  const { data, error } = await supabase.rpc("get_recent_rsi_alerts", {
+    p_symbol: symbol,
+    p_interval: interval, // NOVO PARÂMETRO
+  });
+
+  if (error) {
+    console.error("Erro ao chamar a função get_recent_rsi_alerts:", error);
+    throw error;
+  }
+  if (data.length === 0) throw error;
+  return data
+}
+
 async function createSymbolObserve(symbol: string): Promise<void> {
   const insertResponse = await supabase.from("symbols_observe").insert({
     symbol,
@@ -235,46 +250,11 @@ async function createSymbolObserve(symbol: string): Promise<void> {
 
   console.log(`Symbol ${symbol} is now being observed.`);
 }
-async function getSymbolObserve(symbol: string): Promise<boolean> {
-  const response = await supabase
-    .from("symbols_observe")
-    .select("*")
-    // .eq("symbol", symbol)
-    .eq("status", ObserveSymbolStatusEnum.observing)
-    .limit(1)
-    .single();
-
-  if (!response.error && response.data) return true;
-  return false;
-}
-
-// export interface Coin {
-//   id: string;
-//   closePrice: number;
-//   emaValue: number;
-//   highPrice: number;
-//   lowPrice: number;
-//   openPrice: number;
-//   rsiValue: number;
-//   timestamp: string;
-// //   intervals: CoinHistoric[];
-// }
-// async function getSymbols(): Promise<string[]> {
-//   const response = await supabase
-//     .from("symbols")
-//     .select("symbol")
-
-//   if (!response.error && response.data) return response.data.map((coin) => coin.symbol);
-//   return [];
-// }
 
 export const SupabaseCoinRepository = {
-  //   loadSymbolIntervalData: loadSymbolIntervalDataFromSupabase,
   saveSymbolIntervalData: saveSymbolIntervalDataToSupabase,
   createSymbolObserve,
-  getSymbolObserve,
   loadInitialStateForAllSymbols,
   getLastCoinHistoric,
-  getIsSended,
-  //   getSymbols
+  checkRecentRsiAlerts,
 };

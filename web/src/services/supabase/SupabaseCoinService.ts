@@ -25,9 +25,6 @@ export interface CoinHistoric {
   timestamp: string;
 }
 
-// Interface para os dados da moeda, alinhada com a tabela 'symbols'
-
-// Mapeia os dados do Supabase (snake_case) para nossa interface (camelCase)
 const mapSupabaseToCoin = (data: any, intervals: CoinHistoric[]): Coin => ({
   id: data.symbol,
   closePrice: data.last_close_price,
@@ -50,7 +47,6 @@ const mapCoinHistoric: (value: any) => CoinHistoric = (item) => ({
   coinId: item.symbol,
   interval: item.interval,
 });
-
 const getCoinLastInterval = async (): Promise<CoinHistoric[]> => {
   const { data, error } = await supabase.rpc(
     "get_latest_market_data_by_symbol_interval"
@@ -64,91 +60,93 @@ const getCoinLastInterval = async (): Promise<CoinHistoric[]> => {
     return order.indexOf(a.interval) - order.indexOf(b.interval);
   });
 };
+const getIntervalsAlert = async (): Promise<CoinHistoric[]> => {
+  const { data, error } = await supabase
+    .from("market_data")
+    .select("rsi_value,timestamp,symbol,interval,close_price,ema_value")
+    .or("rsi_value.lt.35,rsi_value.gt.70")
+    .limit(200)
+    .order("timestamp", { ascending: false });
+
+  if (error) {
+    console.error("Error fetching interval alerts:", error);
+    return [];
+  }
+
+  return data.map(mapCoinHistoric);
+};
+const getCoins = async (): Promise<Coin[]> => {
+  const { data: initialData, error } = await supabase
+    .from("symbols")
+    .select("*")
+    .order("last_timestamp", { ascending: false });
+
+  if (error) {
+    console.error("Error fetching initial coins:", error);
+    return [];
+  }
+  const data = await getCoinLastInterval();
+
+  if (initialData) {
+    const initialCoins = initialData.map((x) => mapSupabaseToCoin(x, data));
+    return initialCoins;
+  }
+  return [];
+};
+const watchIntervals = (
+  setRsiHistoric: Dispatch<SetStateAction<CoinHistoric[]>>,
+  setCoins: Dispatch<SetStateAction<Coin[]>>
+) => {
+  console.log("watch");
+  const channel = supabase
+    .channel("rsi-alert-channel-filter")
+    .on(
+      "postgres_changes",
+      {
+        event: "INSERT",
+        schema: "public",
+        table: "market_data",
+        //   filter: "interval=neq.1m",
+      },
+      (payload) => {
+        const { new: newData } = payload;
+        if (!newData) return;
+
+        setCoins((p) => {
+          return p.map((x) => {
+            if (x.id === newData.symbol) {
+              return {
+                ...x,
+                intervals: x.intervals.map((y) => {
+                  if (y.interval === newData.interval)
+                    return mapCoinHistoric(newData);
+                  return y;
+                }),
+              };
+            }
+            return x;
+          });
+        });
+
+        if (newData.interval === "1m") return;
+        if (
+          newData.rsi_value === null ||
+          (newData.rsi_value >= 35 && newData.rsi_value <= 70)
+        )
+          return;
+
+        const historicData = mapCoinHistoric(newData);
+        setRsiHistoric((p) => [historicData, ...p]);
+      }
+    )
+    .subscribe(console.log);
+
+  return channel;
+};
 
 export const SupabaseCoinService = {
-  getCoins: async (): Promise<Coin[]> => {
-    const { data: initialData, error } = await supabase
-      .from("symbols")
-      .select("*")
-      .order("last_timestamp", { ascending: false });
-
-    if (error) {
-      console.error("Error fetching initial coins:", error);
-      return [];
-    }
-    const data = await getCoinLastInterval();
-
-    if (initialData) {
-      const initialCoins = initialData.map((x) => mapSupabaseToCoin(x, data));
-      return initialCoins;
-    }
-    return [];
-  },
+  getCoins,
   getCoinLastInterval,
-  getIntervalsAlert: async (): Promise<CoinHistoric[]> => {
-    const { data, error } = await supabase
-      .from("market_data")
-      .select("rsi_value,timestamp,symbol,interval,close_price,ema_value")
-      .or("rsi_value.lt.35,rsi_value.gt.70")
-      .limit(200)
-      .order("timestamp", { ascending: false });
-
-    if (error) {
-      console.error("Error fetching interval alerts:", error);
-      return [];
-    }
-
-    return data.map(mapCoinHistoric);
-  },
-
-  watchIntervals: (
-    setRsiHistoric: Dispatch<SetStateAction<CoinHistoric[]>>,
-    setCoins: Dispatch<SetStateAction<Coin[]>>
-  ) => {
-    console.log("watch");
-    const channel = supabase
-      .channel("rsi-alert-channel-filter")
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "market_data",
-          //   filter: "interval=neq.1m",
-        },
-        (payload) => {
-          const { new: newData } = payload;
-          if (!newData) return;
-
-          setCoins((p) => {
-            return p.map((x) => {
-              if (x.id === newData.symbol) {
-                return {
-                  ...x,
-                  intervals: x.intervals.map((y) => {
-                    if (y.interval === newData.interval)
-                      return mapCoinHistoric(newData);
-                    return y;
-                  }),
-                };
-              }
-              return x;
-            });
-          });
-
-          if (newData.interval === "1m") return;
-          if (
-            newData.rsi_value === null ||
-            (newData.rsi_value >= 35 && newData.rsi_value <= 70)
-          )
-            return;
-
-          const historicData = mapCoinHistoric(newData);
-          setRsiHistoric((p) => [historicData, ...p]);
-        }
-      )
-      .subscribe(console.log);
-
-    return channel;
-  },
+  getIntervalsAlert,
+  watchIntervals,
 };

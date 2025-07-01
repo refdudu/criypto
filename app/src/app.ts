@@ -79,28 +79,50 @@ async function getTopGainersFromBinance(
   }
 }
 
-const main = async () => {
+const server = () => {
   const app = express();
   app.use(express.json());
 
-  app.get("/:symbol", async (req, res) => {
-    const { symbol } = req.params;
-    await lucaWebhook({
-      id: symbol,
-      rsi: 30,
-      ema: 107000,
-      date: new Date(),
-      interval: "1h",
-    });
-    res.status(200).send(indicatorStates);
-  });
+//   app.get("/:symbol", async (req, res) => {
+//     const { symbol } = req.params;
+//     // await lucaWebhook({
+//     //   id: symbol,
+//     //   rsi: 28,
+//     //   ema: 200,
+//     //   date: new Date(),
+//     //   interval: "1h",
+//     // });
+//     res.status(200).send(indicatorStates);
+//   });
   app.get("/", async (req, res) => {
-    res.status(200).send("ok");
+    // const data = Object.entries(indicatorStates)
+    //   .map(([symbol, intervals]) => ({
+    //     symbol,
+    //     intervals: Object.keys(intervals),
+    //   }))
+    //   .flatMap(({ intervals, symbol }) =>
+    //     intervals.map((interval) => ({
+    //       symbol,
+    //       interval,
+    //     }))
+    //   );
+    // const promises = data.map((x) =>
+    //   SupabaseCoinRepository.checkRecentRsiAlerts(x.symbol, x.interval).catch(
+    //     console.error
+    //   )
+    // );
+    // const _data = [];
+    // for (const promise of promises) { 
+    //     _data.push(await promise);
+    // }
+    res.status(200).send('ok');
   });
 
   const port = process.env.API_PORT || 3000;
   const listener = app.listen(port, () => console.log(listener.address()));
+};
 
+const binanceStart = async () => {
   const binance = new Binance({
     APIKEY: process.env.BINANCE_API_KEY,
     APISECRET: process.env.BINANCE_API_SECRET,
@@ -109,7 +131,6 @@ const main = async () => {
 
   const symbolsToMonitor = await getTopGainersFromBinance(
     binance,
-    // config.dynamicSymbols.topNGainers,
     config.dynamicSymbols.quoteAsset,
     config.dynamicSymbols.minVolume24h
   );
@@ -119,24 +140,18 @@ const main = async () => {
     return;
   }
 
-  console.log(
-    "SÍMBOLOS MONITORADOS NESTA SESSÃO:",
-    symbolsToMonitor.join(", ")
-  );
-
   indicatorStates = await SupabaseCoinRepository.loadInitialStateForAllSymbols(
     symbolsToMonitor,
     config.intervals,
     config.historyFetchLimit
   );
+  //   return;
 
   const streams = symbolsToMonitor.flatMap((symbol) =>
     config.intervals.map(
       (interval) => `${symbol.toLowerCase()}@kline_${interval}`
     )
   );
-
-  console.log(`Iniciando monitoramento para ${streams.length} streams...`);
 
   streams.forEach(async (stream, index) => {
     const callback = (klineEventData: KlineEvent) => {
@@ -149,8 +164,6 @@ const main = async () => {
         );
       }
     };
-
-    // console.log("Tentando conectar ao WebSocket...");
     await new Promise((resolve) =>
       setTimeout(() => resolve(true), 100 * index)
     );
@@ -170,32 +183,34 @@ const main = async () => {
     listen(0);
   });
 
-  binance.websockets.prevDay(
-    symbolsToMonitor,
-    async (_error: any, data: BinancePrevDayResponse) => {
-      //   if (parseFloat(data.quoteVolume) < 10000000) return;
-      const percent = parseFloat(data.percentChange);
-      if (percent < 20) return;
-      // cria registro de variação maior de 20% para caso um RSI menor que 30 nos intervalos de 5m, 15m e 1h aparecer
-      // se ja tiver registro da moeda deve ignorar
+  //   binance.websockets.prevDay(
+  //     symbolsToMonitor,
+  //     async (_error: any, data: BinancePrevDayResponse) => {
+  //       //   if (parseFloat(data.quoteVolume) < 10000000) return;
+  //       const percent = parseFloat(data.percentChange);
+  //       if (percent < 20) return;
+  //       // cria registro de variação maior de 20% para caso um RSI menor que 30 nos intervalos de 5m, 15m e 1h aparecer
+  //       // se ja tiver registro da moeda deve ignorar
 
-      try {
-        const isObservable = await SupabaseCoinRepository.getSymbolObserve(
-          data.symbol
-        );
-        if (isObservable) return;
-        await SupabaseCoinRepository.createSymbolObserve(data.symbol);
-        console.log(data.percentChange, data.symbol);
-      } catch (e) {
-        console.log(e);
-      }
-    }
-  );
+  //       try {
+  //         const isObservable = await SupabaseCoinRepository.getSymbolObserve(
+  //           data.symbol
+  //         );
+  //         if (isObservable) return;
+  //         await SupabaseCoinRepository.createSymbolObserve(data.symbol);
+  //         console.log(data.percentChange, data.symbol);
+  //       } catch (e) {
+  //         console.log(e);
+  //       }
+  //     }
+  //   );
 };
 
-/**
- * Manipula cada evento de kline, calcula os indicadores e salva no banco de dados.
- */
+const main = async () => {
+  server();
+  binanceStart();
+};
+
 const handleKlineData = async (klinePayload: KlineEvent): Promise<void> => {
   const { s: eventSymbol, k: kline, E: eventTime } = klinePayload;
   if (!kline.x) return;
@@ -279,11 +294,9 @@ const handleKlineData = async (klinePayload: KlineEvent): Promise<void> => {
         config.rsiPeriod;
     }
 
-    // Armazena as novas médias para o próximo cálculo
     tfState.previousAverageGain = avgGain;
     tfState.previousAverageLoss = avgLoss;
 
-    // Calcula o valor final do RSI
     if (avgLoss === 0) {
       tfState.rsiValue = 100;
     } else {
@@ -292,25 +305,11 @@ const handleKlineData = async (klinePayload: KlineEvent): Promise<void> => {
     }
   }
 
-  // Log dos indicadores calculados
   console.log(
     `[${eventSymbol}@${interval}] EMA(${
       config.emaPeriod
     }): ${currentEMA.toFixed(4)}`
   );
-  //   if (tfState.rsiValue !== null) {
-  //     console.log(
-  //       `[${eventSymbol}@${interval}] RSI(${
-  //         config.rsiPeriod
-  //       }): ${tfState.rsiValue.toFixed(2)}`
-  //     );
-  //   } else {
-  //     console.log(
-  //       `[${eventSymbol}@${interval}] RSI: Aguardando mais dados (${
-  //         tfState.closePrices.length
-  //       }/${config.rsiPeriod + 1} velas)`
-  //     );
-  //   }
 
   const klineDataForHistory: HistoricalKlineData = {
     closePrice: closePrice,
@@ -328,53 +327,44 @@ const handleKlineData = async (klinePayload: KlineEvent): Promise<void> => {
       interval,
       klineDataForHistory
     );
+    sendWebhook(eventSymbol, tfState, currentEMA, eventTime, interval).catch(
+      (e) =>
+        console.error(
+          `Erro ao enviar webhook para ${eventSymbol}@${interval}:`,
+          e
+        )
+    );
   } catch {}
-  //   console.log(tfState);
+};
 
-  switch (interval) {
-    case "15m":
-    case "1h":
-    case "4h": {
-      if (
-        tfState.rsiValue &&
-        (tfState.rsiValue < 30 || tfState.rsiValue > 70)
-      ) {
-        const isSended = await SupabaseCoinRepository.getIsSended(
-          eventSymbol,
-          interval
-        );
-        if (isSended) return;
-        console.log('enviando alerta para', eventSymbol, interval);
-        const id = CoinMap[eventSymbol];
-        if (!id) return;
-        try {
-          await lucaWebhook({
-            id,
-            rsi: tfState.rsiValue,
-            ema: currentEMA,
-            date: new Date(eventTime),
-            interval: interval,
-          });
-        } catch {}
-      }
-      break;
-    }
+const sendWebhook = async (
+  eventSymbol: string,
+  tfState: SymbolTimeframeIndicatorState,
+  currentEMA: number,
+  eventTime: number,
+  interval: string
+) => {
+  const intervals = ["15m", "1h", "4h"];
+  if (!intervals.includes(interval)) return;
+
+  if (!tfState.rsiValue || (tfState.rsiValue >= 30 && tfState.rsiValue <= 70)) {
+    return;
   }
+  const isSended = await SupabaseCoinRepository.checkRecentRsiAlerts(
+    eventSymbol,
+    interval
+  );
+  if (isSended) return;
+  const id = CoinMap[eventSymbol];
+  if (!id) return;
 
-  //   if (!tfState.rsiValue || tfState.rsiValue > 30) return;
-  //   console.log(tfState);
-  //   const lastCoinHistoric = await SupabaseCoinRepository.getLastCoinHistoric(
-  //     eventSymbol,
-  //     interval
-  //   );
-  //   if (
-  //     !lastCoinHistoric.rsiValue ||
-  //     lastCoinHistoric.rsiValue < tfState.rsiValue
-  //   )
-  //     return;
-  //   console.log(
-  //     `RSI ${tfState.rsiValue} < 30 para ${eventSymbol}@${interval}. Salvando histórico.`
-  //   );
+  await lucaWebhook({
+    id,
+    rsi: tfState.rsiValue,
+    ema: currentEMA,
+    date: new Date(eventTime),
+    interval: interval,
+  });
 };
 
 main().catch((error) => {
