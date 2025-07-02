@@ -374,7 +374,15 @@ const sendWebhook = async (
       date: new Date(eventTime),
       interval: interval,
     });
-  } catch {}
+  } catch {
+    const id = CoinMap[eventSymbol];
+    await lucaWebhook({
+      id,
+      rsi,
+      ema: currentEMA,
+      date: new Date(eventTime),
+      interval: interval,
+    });}
 };
 
 main().catch((error) => {
