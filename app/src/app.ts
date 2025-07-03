@@ -106,12 +106,14 @@ const server = () => {
           interval,
         }))
       );
-    data.forEach((x) => {
+    const promises = data.map((x) =>
       SupabaseCoinRepository.checkRecentRsiAlerts(x.symbol, x.interval)
-        .then(console.log)
-        .catch(() => {});
-    });
-    res.status(200).send(data);
+    );
+    try {
+      const results = await Promise.all(promises);
+      res.status(200).send(results);
+    } catch {}
+    res.status(200).send("results");
   });
 
   const port = process.env.API_PORT || 3000;
