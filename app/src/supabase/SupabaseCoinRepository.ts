@@ -235,7 +235,7 @@ async function checkRecentRsiAlerts(
 
   if (error) {
     console.error("Erro ao chamar a função get_recent_rsi_alerts:", error);
-    throw error;
+    throw null;
   }
   if (data.length === 0) throw error;
   return data
