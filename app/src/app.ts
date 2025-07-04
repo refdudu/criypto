@@ -164,7 +164,7 @@ const binanceStart = async () => {
     config.intervals,
     config.historyFetchLimit
   );
-  return;
+//   return;
 
   const streams = symbolsToMonitor.flatMap((symbol) =>
     config.intervals.map(
