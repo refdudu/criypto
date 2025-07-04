@@ -267,7 +267,7 @@ async function saveSymbolIntervalDataToSupabase(
     if (upsertError) {
       console.error("Error upserting symbol summary data:", upsertError);
       throw upsertError;
-    }
+    }   
   } catch (error) {
     console.error(
       `Failed to save state for ${symbol}@${interval} to Supabase:`,

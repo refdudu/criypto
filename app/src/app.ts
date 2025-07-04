@@ -225,9 +225,7 @@ const binanceStart = async () => {
         );
       }
     };
-    await new Promise((resolve) =>
-      setTimeout(() => resolve(true), 50 * index)
-    );
+    await new Promise((resolve) => setTimeout(() => resolve(true), 50 * index));
     console.log(`${stream} iniciado.`);
     const listen = (tries: number) => {
       if (tries > 10) {
@@ -518,7 +516,7 @@ const handleKlineData = async (klinePayload: KlineEvent): Promise<void> => {
       eventSymbol,
       interval,
       newKlineData
-    );
+    ).catch((e) => console.error("Falha ao salvar histórico:", e));
     enqueueWebhook(
       eventSymbol,
       tfState.rsiValue,
