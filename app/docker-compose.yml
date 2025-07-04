@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  # Nome do nosso serviço
+  crypto-bot:
+    # Constrói a imagem a partir do Dockerfile na pasta atual (.)
+    build: .
+    # Nome da imagem que será criada
+    image: crypto-bot-app
+    # Nome do container que será executado
+    container_name: crypto-bot-container
+    # Reinicia o container automaticamente em caso de falha ou reinicialização do servidor
+    restart: unless-stopped
+    # Mapeia a porta 3000 do container para a porta 3000 da sua VPS
+    # Se a porta 3000 já estiver em uso na VPS, você pode mudar aqui (ex: "8080:3000")
+    ports:
+      - "3000:3000"
+    # Carrega as variáveis de ambiente a partir de um arquivo .env
+    # Este arquivo DEVE estar na mesma pasta que o docker-compose.yml na sua VPS
+    env_file:
+      - .env

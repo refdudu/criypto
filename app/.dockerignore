@@ -1,0 +1,14 @@
+# Ignora dependências locais, pois serão instaladas dentro do container
+node_modules
+
+# Ignora a pasta de build local, pois será gerada dentro do container
+dist
+
+# Ignora arquivos de ambiente local. Eles devem ser fornecidos em tempo de execução
+.env
+
+# Ignora logs e arquivos de configuração do Docker
+Dockerfile
+.dockerignore
+docker-compose.yml
+npm-debug.log
