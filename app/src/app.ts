@@ -19,7 +19,7 @@ import { webhook } from "./webhook";
 export const config = {
   dynamicSymbols: {
     enabled: true,
-    topNGainers: 100,
+    // topNGainers: 100,
     quoteAsset: "USDT",
     minVolume24h: 50_000, // 50 mil em volume de USDT
     fallbackSymbols: ["BTCUSDT", "ETHUSDT"], // Símbolos para monitorar se a busca dinâmica estiver desabilitada
@@ -30,11 +30,51 @@ export const config = {
   historyFetchLimit: 200,
 };
 
+const webhookQueue: Array<{
+  eventSymbol: string;
+  rsi: number | null;
+  currentEMA: number;
+  eventTime: number;
+  interval: string;
+}> = [];
+let isProcessingQueue = false;
+
 // --- Estado em Memória para os Indicadores ---
 // Mantém os valores necessários para o cálculo contínuo (suavizado) do RSI
 let indicatorStates: DataSymbolsState = {};
 
 // --- Função para Buscar Top Gainers (Mantida) ---
+
+function enqueueWebhook(
+  eventSymbol: string,
+  rsi: number | null,
+  currentEMA: number,
+  eventTime: number,
+  interval: string
+) {
+  webhookQueue.push({ eventSymbol, rsi, currentEMA, eventTime, interval });
+  processWebhookQueue();
+}
+
+async function processWebhookQueue() {
+  if (isProcessingQueue) return;
+  isProcessingQueue = true;
+  while (webhookQueue.length > 0) {
+    const item = webhookQueue.shift();
+    if (item) {
+      await sendWebhook(
+        item.eventSymbol,
+        item.rsi,
+        item.currentEMA,
+        item.eventTime,
+        item.interval
+      );
+      // Aguarda 1 minuto antes de processar o próximo
+      await new Promise((resolve) => setTimeout(resolve, 60_000));
+    }
+  }
+  isProcessingQueue = false;
+}
 
 async function getTopGainersFromBinance(
   binance: Binance,
@@ -474,17 +514,12 @@ const handleKlineData = async (klinePayload: KlineEvent): Promise<void> => {
       interval,
       newKlineData
     );
-    sendWebhook(
+    enqueueWebhook(
       eventSymbol,
       tfState.rsiValue,
       tfState.emaValue,
       eventTime,
       interval
-    ).catch((e) =>
-      console.error(
-        `Erro ao enviar webhook para ${eventSymbol}@${interval}:`,
-        e
-      )
     );
   } catch {}
 };
