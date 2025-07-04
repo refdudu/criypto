@@ -7,7 +7,25 @@ export interface HistoricalKlineData {
   openPrice: number;
   highPrice: number;
   lowPrice: number;
-  timestamp: string;
+  timestamp: string; // ISO String
+}
+
+export interface SymbolTimeframeIndicatorState {
+  klineHistory: HistoricalKlineData[];
+
+  previousAverageGain: number | null;
+  previousAverageLoss: number | null;
+  rsiValue: number | null;
+  emaValue: number | null;
+
+  lastHigh: { price: number; rsi: number; timestamp: number } | null;
+  lastLow: { price: number; rsi: number; timestamp: number } | null;
+
+  armedDivergence: {
+    type: "BULLISH" | "BEARISH";
+    confirmationPrice: number;
+    armedAtTimestamp: number;
+  } | null;
 }
 export enum ObserveSymbolStatusEnum {
   "observing" = 1,

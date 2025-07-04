@@ -30,7 +30,7 @@ async function loadInitialStateForAllSymbols(
 ): Promise<DataSymbolsState> {
   console.log(`Buscando dados iniciais para ${symbols.length} símbolos...`);
 
-  // 1. Busca o histórico de velas (como antes)
+  // 1. Busca o histórico de velas
   const { data: klineData, error: klineError } = await supabase.rpc(
     "get_latest_market_data_for_symbols",
     {
@@ -40,38 +40,25 @@ async function loadInitialStateForAllSymbols(
     }
   );
 
-  if (klineError) {
-    console.error(
-      "Erro ao carregar dados históricos do Supabase via RPC:",
-      klineError
-    );
-    throw klineError;
-  }
-
-  const data = klineData as CoinHistoricSupabase[];
-  if (!data || data.length === 0) {
-    console.warn(
-      "Nenhum dado histórico encontrado. O estado será inicializado vazio."
-    );
-  }
-
-  console.log(
-    `Recebidos ${data.length} registros de velas. Agrupando agora...`
-  );
+  if (klineError) throw klineError;
 
   const groupedState: DataSymbolsState = {};
 
-  // Inicializa a estrutura do estado para todos os símbolos e intervalos
+  // 2. Inicializa a estrutura do estado
   for (const symbol of symbols) {
     groupedState[symbol] = {};
     for (const interval of intervals) {
       groupedState[symbol][interval] = {
-        closePrices: [],
-        emaHistory: [],
+        klineHistory: [],
         previousAverageGain: null,
         previousAverageLoss: null,
         rsiValue: null,
-        // Inicializa os campos de divergência
+        emaValue: null,
+        lastHigh: null,
+        lastLow: null,
+        armedDivergence: null,
+        closePrices: [],
+        emaHistory: [],
         lastHighPrice: null,
         lastHighRsi: null,
         lastLowPrice: null,
@@ -80,32 +67,35 @@ async function loadInitialStateForAllSymbols(
     }
   }
 
-  // Preenche o estado com os dados das velas
-  data.forEach((item) => {
+  // 3. Preenche o estado com os dados das velas
+  (klineData || []).forEach((item: any) => {
     const { symbol, interval } = item;
     if (groupedState[symbol] && groupedState[symbol][interval]) {
-      groupedState[symbol][interval].closePrices.push(item.close_price);
-      if (item.ema_value) {
-        groupedState[symbol][interval].emaHistory.push(item.ema_value);
-      }
+      groupedState[symbol][interval].klineHistory.unshift({
+        // unshift para manter em ordem cronológica
+        closePrice: item.close_price,
+        openPrice: item.open_price,
+        highPrice: item.high_price,
+        lowPrice: item.low_price,
+        emaValue: item.ema_value,
+        rsiValue: item.rsi_value,
+        timestamp: item.timestamp,
+      });
     }
   });
 
-  // 2. Busca o estado salvo dos indicadores (picos e vales) da nova tabela
-  console.log("Buscando estados de indicadores salvos (picos/vales)...");
+  // 4. Busca o estado salvo dos indicadores
+  console.log("Buscando estados de indicadores salvos...");
   const { data: indicatorStatesData, error: stateError } = await supabase
     .from("indicator_states")
-    .select(
-      "symbol, interval, last_high_price, last_high_rsi, last_low_price, last_low_rsi"
-    )
+    .select("*")
     .in("symbol", symbols);
 
   if (stateError) {
     console.error("Erro ao carregar estados de indicadores:", stateError);
-    // Não lançamos um erro aqui, podemos continuar com o estado zerado
   }
 
-  // 3. Mescla o estado salvo no objeto de estado principal
+  // 5. Mescla o estado salvo
   if (indicatorStatesData) {
     indicatorStatesData.forEach((state) => {
       const {
@@ -113,15 +103,40 @@ async function loadInitialStateForAllSymbols(
         interval,
         last_high_price,
         last_high_rsi,
+        last_high_timestamp,
         last_low_price,
         last_low_rsi,
+        last_low_timestamp,
+        armed_divergence_type,
+        armed_confirmation_price,
+        armed_at_timestamp,
       } = state;
       if (groupedState[symbol] && groupedState[symbol][interval]) {
-        console.log(`Estado salvo encontrado para ${symbol}@${interval}.`);
-        groupedState[symbol][interval].lastHighPrice = last_high_price;
-        groupedState[symbol][interval].lastHighRsi = last_high_rsi;
-        groupedState[symbol][interval].lastLowPrice = last_low_price;
-        groupedState[symbol][interval].lastLowRsi = last_low_rsi;
+        if (last_high_price && last_high_rsi && last_high_timestamp) {
+          groupedState[symbol][interval].lastHigh = {
+            price: last_high_price,
+            rsi: last_high_rsi,
+            timestamp: new Date(last_high_timestamp).getTime(),
+          };
+        }
+        if (last_low_price && last_low_rsi && last_low_timestamp) {
+          groupedState[symbol][interval].lastLow = {
+            price: last_low_price,
+            rsi: last_low_rsi,
+            timestamp: new Date(last_low_timestamp).getTime(),
+          };
+        }
+        if (
+          armed_divergence_type &&
+          armed_confirmation_price &&
+          armed_at_timestamp
+        ) {
+          groupedState[symbol][interval].armedDivergence = {
+            type: armed_divergence_type as "BULLISH" | "BEARISH",
+            confirmationPrice: armed_confirmation_price,
+            armedAtTimestamp: new Date(armed_at_timestamp).getTime(),
+          };
+        }
       }
     });
   }
@@ -269,10 +284,21 @@ async function updateIndicatorState(
   const updateData = {
     symbol,
     interval,
-    last_high_price: state.lastHighPrice,
-    last_high_rsi: state.lastHighRsi,
-    last_low_price: state.lastLowPrice,
-    last_low_rsi: state.lastLowRsi,
+    last_high_price: state.lastHigh?.price,
+    last_high_rsi: state.lastHigh?.rsi,
+    last_high_timestamp: state.lastHigh
+      ? new Date(state.lastHigh.timestamp).toISOString()
+      : null,
+    last_low_price: state.lastLow?.price,
+    last_low_rsi: state.lastLow?.rsi,
+    last_low_timestamp: state.lastLow
+      ? new Date(state.lastLow.timestamp).toISOString()
+      : null,
+    armed_divergence_type: state.armedDivergence?.type,
+    armed_confirmation_price: state.armedDivergence?.confirmationPrice,
+    armed_at_timestamp: state.armedDivergence
+      ? new Date(state.armedDivergence.armedAtTimestamp).toISOString()
+      : null,
   };
 
   const { error } = await supabase.from("indicator_states").upsert(updateData, {

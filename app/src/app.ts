@@ -14,6 +14,7 @@ import {
 } from "./supabase/SupabaseCoinRepository";
 import { lucaWebhook } from "./lucaWebhook";
 import { CoinMap } from "./coinMap";
+import { webhook } from "./webhook";
 
 export const config = {
   dynamicSymbols: {
@@ -230,222 +231,253 @@ const main = async () => {
   binanceStart();
 };
 
+// --- FUNÇÃO PRINCIPAL MODIFICADA ---
 const handleKlineData = async (klinePayload: KlineEvent): Promise<void> => {
   const { s: eventSymbol, k: kline, E: eventTime } = klinePayload;
-  if (!kline.x) return;
+  if (!kline.x) return; // Processar apenas em velas fechadas
 
   const interval = kline.i;
   const closePrice = parseFloat(kline.c);
+  const highPrice = parseFloat(kline.h);
+  const lowPrice = parseFloat(kline.l);
+  const klineTimestamp = kline.t;
 
   if (!indicatorStates[eventSymbol]?.[interval]) {
     console.warn(
-      `Estado não encontrado para ${eventSymbol}@${interval}. Criando.`
+      `Estado para ${eventSymbol}@${interval} não foi pré-carregado. Ignorando.`
     );
-    indicatorStates[eventSymbol] = {
-      [interval]: {
-        emaHistory: [],
-        closePrices: [],
-        rsiValue: null,
-        previousAverageGain: null,
-        previousAverageLoss: null,
-        lastHighPrice: null,
-        lastHighRsi: null,
-        lastLowPrice: null,
-        lastLowRsi: null,
-      },
-    };
+    return;
   }
 
-  const tfState = indicatorStates[eventSymbol]?.[interval];
+  const tfState = indicatorStates[eventSymbol][interval];
+  let stateChanged = false;
 
-  console.log(
-    `\n--- [${eventSymbol} @ ${interval} | ${new Date(
-      eventTime
-    ).toLocaleTimeString("pt-BR")}] Fech: ${closePrice.toFixed(4)} ---`
-  );
-
-  // --- CÁLCULO DE EMA ---
-  const emaMultiplier = 2 / (config.emaPeriod + 1);
-  const lastEMA =
-    tfState.emaHistory.length > 0
-      ? tfState.emaHistory[tfState.emaHistory.length - 1]
-      : closePrice; // Usa o primeiro preço de fechamento se não houver histórico de EMA
-  const currentEMA = closePrice * emaMultiplier + lastEMA * (1 - emaMultiplier);
-
-  tfState.emaHistory.push(currentEMA);
-  if (tfState.emaHistory.length > config.historyFetchLimit) {
-    tfState.emaHistory.shift();
+  // 1. ATUALIZAR HISTÓRICO E CALCULAR INDICADORES
+  const newKlineData: HistoricalKlineData = {
+    closePrice,
+    openPrice: parseFloat(kline.o),
+    highPrice,
+    lowPrice,
+    timestamp: new Date(klineTimestamp).toISOString(),
+    emaValue: null,
+    rsiValue: null,
+  };
+  tfState.klineHistory = tfState.klineHistory || [];
+  tfState.klineHistory.push(newKlineData);
+  if (tfState.klineHistory.length > config.historyFetchLimit) {
+    tfState.klineHistory.shift();
   }
 
-  tfState.closePrices.push(closePrice);
-
-  if (tfState.closePrices.length > config.rsiPeriod) {
-    const priceChanges: number[] = [];
-    for (let i = 1; i < tfState.closePrices.length; i++) {
-      const change = tfState.closePrices[i] - tfState.closePrices[i - 1];
-      priceChanges.push(change);
-    }
-
-    const gains = priceChanges.map((change) => (change > 0 ? change : 0));
-    const losses = priceChanges.map((change) =>
-      change < 0 ? Math.abs(change) : 0
-    );
-
-    let avgGain: number;
-    let avgLoss: number;
-
-    // Se não tivermos médias anteriores, calculamos a média simples (primeiro cálculo)
-    if (
-      tfState.previousAverageGain === null ||
-      tfState.previousAverageLoss === null
-    ) {
-      const initialGains = gains.slice(-config.rsiPeriod); // Pega os últimos N ganhos
-      const initialLosses = losses.slice(-config.rsiPeriod); // Pega as últimas N perdas
-      avgGain =
-        initialGains.reduce((acc, val) => acc + val, 0) / config.rsiPeriod;
-      avgLoss =
-        initialLosses.reduce((acc, val) => acc + val, 0) / config.rsiPeriod;
+  // --- Cálculo de EMA ---
+  const closePrices = tfState.klineHistory.map((k) => k.closePrice);
+  const emaPeriod = config.emaPeriod;
+  let currentEMA = closePrices[closePrices.length - 1];
+  if (closePrices.length >= emaPeriod) {
+    if (!tfState.emaHistory || tfState.emaHistory.length === 0) {
+      // Primeira média: média simples
+      const sma =
+        closePrices.slice(-emaPeriod).reduce((a, b) => a + b, 0) / emaPeriod;
+      currentEMA = sma;
     } else {
-      // Se já tivermos, usamos o cálculo suavizado (Wilder's RSI)
-      const lastGain = gains[gains.length - 1];
-      const lastLoss = losses[losses.length - 1];
-      avgGain =
-        (tfState.previousAverageGain * (config.rsiPeriod - 1) + lastGain) /
-        config.rsiPeriod;
-      avgLoss =
-        (tfState.previousAverageLoss * (config.rsiPeriod - 1) + lastLoss) /
-        config.rsiPeriod;
+      const multiplier = 2 / (emaPeriod + 1);
+      currentEMA =
+        (closePrices[closePrices.length - 1] -
+          tfState.emaHistory[tfState.emaHistory.length - 1]) *
+          multiplier +
+        tfState.emaHistory[tfState.emaHistory.length - 1];
     }
+    tfState.emaHistory = tfState.emaHistory || [];
+    tfState.emaHistory.push(currentEMA);
+    if (tfState.emaHistory.length > config.historyFetchLimit)
+      tfState.emaHistory.shift();
+  }
+  tfState.emaValue = currentEMA;
+  newKlineData.emaValue = currentEMA;
 
+  // --- Cálculo de RSI ---
+  const rsiPeriod = config.rsiPeriod;
+  if (closePrices.length > rsiPeriod) {
+    const priceChanges = closePrices
+      .slice(-rsiPeriod - 1)
+      .map((v, i, arr) => (i === 0 ? 0 : v - arr[i - 1]))
+      .slice(1);
+    const gains = priceChanges.map((c) => (c > 0 ? c : 0));
+    const losses = priceChanges.map((c) => (c < 0 ? Math.abs(c) : 0));
+    let avgGain, avgLoss;
+    if (
+      tfState.previousAverageGain == null ||
+      tfState.previousAverageLoss == null
+    ) {
+      avgGain = gains.reduce((a, b) => a + b, 0) / rsiPeriod;
+      avgLoss = losses.reduce((a, b) => a + b, 0) / rsiPeriod;
+    } else {
+      avgGain =
+        (tfState.previousAverageGain * (rsiPeriod - 1) +
+          gains[gains.length - 1]) /
+        rsiPeriod;
+      avgLoss =
+        (tfState.previousAverageLoss * (rsiPeriod - 1) +
+          losses[losses.length - 1]) /
+        rsiPeriod;
+    }
     tfState.previousAverageGain = avgGain;
     tfState.previousAverageLoss = avgLoss;
-
-    if (avgLoss === 0) {
-      tfState.rsiValue = 100;
-    } else {
+    let rsi = 100;
+    if (avgLoss !== 0) {
       const rs = avgGain / avgLoss;
-      tfState.rsiValue = 100 - 100 / (1 + rs);
+      rsi = 100 - 100 / (1 + rs);
+    }
+    tfState.rsiValue = rsi;
+    newKlineData.rsiValue = rsi;
+  }
+
+  if (!tfState.rsiValue) return; // Precisa de RSI para continuar
+
+  // 2. LÓGICA DE CONFIRMAÇÃO DE DIVERGÊNCIA ARMADA
+  if (tfState.armedDivergence) {
+    const { type, confirmationPrice, armedAtTimestamp } =
+      tfState.armedDivergence;
+    const intervalMs =
+      parseInt(interval.slice(0, -1)) *
+      (interval.endsWith("m") ? 60 : 3600) *
+      1000;
+    if (klineTimestamp - armedAtTimestamp > 14 * intervalMs) {
+      console.log(
+        `[INFO] Divergência ${type} para ${eventSymbol}@${interval} expirou. Sinal cancelado.`
+      );
+      tfState.armedDivergence = null;
+      stateChanged = true;
+    } else {
+      if (type === "BULLISH" && highPrice > confirmationPrice) {
+        console.log(
+          `%c[ALERTA CONFIRMADO] DIVERGÊNCIA DE ALTA para ${eventSymbol}@${interval}! Preço rompeu ${confirmationPrice}`,
+          "color: green; font-weight: bold;"
+        );
+        webhook({
+          id: CoinMap[eventSymbol],
+          rsi: tfState.rsiValue,
+          ema: tfState.emaValue,
+          date: new Date(eventTime),
+          interval: interval,
+          type: "BULLISH",
+        });
+        // ENVIAR WEBHOOK DE COMPRA/ALTA
+        // sendDivergenceAlert(...);
+        tfState.armedDivergence = null;
+        tfState.lastLow = null;
+        stateChanged = true;
+      } else if (type === "BEARISH" && lowPrice < confirmationPrice) {
+        console.log(
+          `%c[ALERTA CONFIRMADO] DIVERGÊNCIA DE BAIXA para ${eventSymbol}@${interval}! Preço rompeu ${confirmationPrice}`,
+          "color: red; font-weight: bold;"
+        );
+        // ENVIAR WEBHOOK DE VENDA/BAIXA
+        // sendDivergenceAlert(...);
+        tfState.armedDivergence = null;
+        tfState.lastHigh = null;
+        stateChanged = true;
+        webhook({
+          id: CoinMap[eventSymbol],
+          rsi: tfState.rsiValue,
+          ema: tfState.emaValue,
+          date: new Date(eventTime),
+          interval: interval,
+          type: "BEARISH",
+        });
+      }
     }
   }
 
-  //#region Calculo divergencia
-  if (tfState.rsiValue) {
-    let stateChanged = false; // Flag para saber se precisamos salvar no banco
-
-    // --- VERIFICA DIVERGÊNCIA DE BAIXA (BEARISH) ---
+  // 3. LÓGICA DE DETECÇÃO E ARME DE NOVAS DIVERGÊNCIAS
+  if (!tfState.armedDivergence) {
+    // DIVERGÊNCIA DE BAIXA
     if (tfState.rsiValue > 70) {
-      if (tfState.lastHighPrice && tfState.lastHighRsi) {
-        if (
-          closePrice > tfState.lastHighPrice &&
-          tfState.rsiValue < tfState.lastHighRsi
-        ) {
-          console.log(
-            `%c[ALERTA] DIVERGÊNCIA DE BAIXA DETECTADA para ${eventSymbol}@${interval}! Preço: ${closePrice}, RSI: ${tfState.rsiValue.toFixed(
-              2
-            )}`,
-            "color: red; font-weight: bold;"
-          );
-          // Ação de alerta (ex: webhook)
-        }
-      }
-      if (!tfState.lastHighRsi || tfState.rsiValue > tfState.lastHighRsi) {
-        tfState.lastHighPrice = closePrice;
-        tfState.lastHighRsi = tfState.rsiValue;
-        stateChanged = true;
+      if (
+        tfState.lastHigh &&
+        highPrice > tfState.lastHigh.price &&
+        tfState.rsiValue < tfState.lastHigh.rsi
+      ) {
+        const historySlice = tfState.klineHistory.filter(
+          (k) => new Date(k.timestamp).getTime() > tfState.lastHigh!.timestamp
+        );
+        const confirmationPrice = Math.min(
+          ...historySlice.map((k) => k.lowPrice)
+        );
         console.log(
-          `%c[INFO] Novo PICO de RSI salvo para ${eventSymbol}@${interval}. Preço: ${
-            tfState.lastHighPrice
-          }, RSI: ${tfState.lastHighRsi.toFixed(2)}`,
+          `%c[SINAL ARMADO] Potencial Divergência de BAIXA para ${eventSymbol}@${interval}. Aguardando quebra de ${confirmationPrice}`,
           "color: orange;"
         );
-      }
-    } else if (tfState.rsiValue < 50 && tfState.lastHighRsi !== null) {
-      // Reseta o último topo quando o RSI sai da zona de sobrecompra
-      tfState.lastHighPrice = null;
-      tfState.lastHighRsi = null;
-      stateChanged = true;
-    }
-
-    // --- VERIFICA DIVERGÊNCIA DE ALTA (BULLISH) ---
-    if (tfState.rsiValue < 30) {
-      if (tfState.lastLowPrice && tfState.lastLowRsi) {
-        if (
-          closePrice < tfState.lastLowPrice &&
-          tfState.rsiValue > tfState.lastLowRsi
-        ) {
-          console.log(
-            `%c[ALERTA] DIVERGÊNCIA DE ALTA DETECTADA para ${eventSymbol}@${interval}! Preço: ${closePrice}, RSI: ${tfState.rsiValue.toFixed(
-              2
-            )}`,
-            "color: green; font-weight: bold;"
-          );
-          // Ação de alerta (ex: webhook)
-        }
-      }
-      if (!tfState.lastLowRsi || tfState.rsiValue < tfState.lastLowRsi) {
-        tfState.lastLowPrice = closePrice;
-        tfState.lastLowRsi = tfState.rsiValue;
+        tfState.armedDivergence = {
+          type: "BEARISH",
+          confirmationPrice,
+          armedAtTimestamp: klineTimestamp,
+        };
         stateChanged = true;
+      }
+      if (!tfState.lastHigh || tfState.rsiValue > tfState.lastHigh.rsi) {
+        tfState.lastHigh = {
+          price: highPrice,
+          rsi: tfState.rsiValue,
+          timestamp: klineTimestamp,
+        };
+        stateChanged = true;
+      }
+    }
+    // DIVERGÊNCIA DE ALTA
+    if (tfState.rsiValue < 30) {
+      if (
+        tfState.lastLow &&
+        lowPrice < tfState.lastLow.price &&
+        tfState.rsiValue > tfState.lastLow.rsi
+      ) {
+        const historySlice = tfState.klineHistory.filter(
+          (k) => new Date(k.timestamp).getTime() > tfState.lastLow!.timestamp
+        );
+        const confirmationPrice = Math.max(
+          ...historySlice.map((k) => k.highPrice)
+        );
         console.log(
-          `%c[INFO] Novo FUNDO de RSI salvo para ${eventSymbol}@${interval}. Preço: ${
-            tfState.lastLowPrice
-          }, RSI: ${tfState.lastLowRsi.toFixed(2)}`,
+          `%c[SINAL ARMADO] Potencial Divergência de ALTA para ${eventSymbol}@${interval}. Aguardando quebra de ${confirmationPrice}`,
           "color: cyan;"
         );
+        tfState.armedDivergence = {
+          type: "BULLISH",
+          confirmationPrice,
+          armedAtTimestamp: klineTimestamp,
+        };
+        stateChanged = true;
       }
-    } else if (tfState.rsiValue > 50 && tfState.lastLowRsi !== null) {
-      // Reseta o último fundo quando o RSI sai da zona de sobrevenda
-      tfState.lastLowPrice = null;
-      tfState.lastLowRsi = null;
-      stateChanged = true;
-    }
-
-    // Se o estado de picos/vales mudou, salva no banco de dados
-    if (stateChanged) {
-      try {
-        await SupabaseCoinRepository.updateIndicatorState(
-          eventSymbol,
-          interval,
-          tfState
-        );
-        console.log(
-          `Estado de divergência para ${eventSymbol}@${interval} salvo no banco.`
-        );
-      } catch (error) {
-        console.error(
-          `Falha ao salvar estado de divergência para ${eventSymbol}@${interval}:`,
-          error
-        );
+      if (!tfState.lastLow || tfState.rsiValue < tfState.lastLow.rsi) {
+        tfState.lastLow = {
+          price: lowPrice,
+          rsi: tfState.rsiValue,
+          timestamp: klineTimestamp,
+        };
+        stateChanged = true;
       }
     }
   }
-  //#endregion Calculo divergencia
-  console.log(
-    `[${eventSymbol}@${interval}] EMA(${
-      config.emaPeriod
-    }): ${currentEMA.toFixed(4)}`
-  );
 
-  const klineDataForHistory: HistoricalKlineData = {
-    closePrice: closePrice,
-    openPrice: parseFloat(kline.o),
-    highPrice: parseFloat(kline.h),
-    lowPrice: parseFloat(kline.l),
-    timestamp: new Date(kline.t).toISOString(),
-    emaValue: currentEMA,
-    rsiValue: tfState.rsiValue,
-  };
+  // 4. PERSISTIR O ESTADO SE HOUVE MUDANÇA
+  if (stateChanged) {
+    await SupabaseCoinRepository.updateIndicatorState(
+      eventSymbol,
+      interval,
+      tfState
+    ).catch((e) => console.error("Falha ao salvar estado:", e));
+  }
 
+  // 5. Salvar histórico e chamar webhook original
   try {
     await SupabaseCoinRepository.saveSymbolIntervalData(
       eventSymbol,
       interval,
-      klineDataForHistory
+      newKlineData
     );
     sendWebhook(
       eventSymbol,
       tfState.rsiValue,
-      currentEMA,
+      tfState.emaValue,
       eventTime,
       interval
     ).catch((e) =>
