@@ -21,7 +21,7 @@ export const config = {
     enabled: true,
     topNGainers: 100,
     quoteAsset: "USDT",
-    minVolume24h: 5000000, // 5 Milhões em volume de USDT
+    minVolume24h: 50_000, // 50 mil em volume de USDT
     fallbackSymbols: ["BTCUSDT", "ETHUSDT"], // Símbolos para monitorar se a busca dinâmica estiver desabilitada
   },
   intervals: ["5m", "15m", "1h", "4h"],
