@@ -235,10 +235,10 @@ async function checkRecentRsiAlerts(
 
   if (error) {
     console.error("Erro ao chamar a função get_recent_rsi_alerts:", error);
-    throw null;
+    return null;
   }
-  if (data.length === 0) throw error;
-  return data
+  if (data.length === 0) return null;
+  return data;
 }
 
 async function createSymbolObserve(symbol: string): Promise<void> {

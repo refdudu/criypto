@@ -83,39 +83,58 @@ const server = () => {
   const app = express();
   app.use(express.json());
 
-//   app.get("/:symbol", async (req, res) => {
-//     const { symbol } = req.params;
-//     // await lucaWebhook({
-//     //   id: symbol,
-//     //   rsi: 28,
-//     //   ema: 200,
-//     //   date: new Date(),
-//     //   interval: "1h",
-//     // });
-//     res.status(200).send(indicatorStates);
-//   });
+  //   app.get("/:symbol", async (req, res) => {
+  //     const { symbol } = req.params;
+  //     // await lucaWebhook({
+  //     //   id: symbol,
+  //     //   rsi: 28,
+  //     //   ema: 200,
+  //     //   date: new Date(),
+  //     //   interval: "1h",
+  //     // });
+  //     res.status(200).send(indicatorStates);
+  //   });
   app.get("/", async (req, res) => {
-    // const data = Object.entries(indicatorStates)
-    //   .map(([symbol, intervals]) => ({
-    //     symbol,
-    //     intervals: Object.keys(intervals),
-    //   }))
-    //   .flatMap(({ intervals, symbol }) =>
-    //     intervals.map((interval) => ({
-    //       symbol,
-    //       interval,
-    //     }))
-    //   );
-    // const promises = data.map((x) =>
-    //   SupabaseCoinRepository.checkRecentRsiAlerts(x.symbol, x.interval).catch(
-    //     console.error
-    //   )
-    // );
-    // const _data = [];
-    // for (const promise of promises) { 
-    //     _data.push(await promise);
-    // }
-    res.status(200).send('ok');
+    const data = Object.entries(indicatorStates)
+      .map(([symbol, intervals]) => ({
+        symbol,
+        intervals: Object.keys(intervals),
+      }))
+      .flatMap(({ intervals, symbol }) =>
+        intervals.map((interval) => ({
+          symbol,
+          interval,
+        }))
+      );
+    const promises = data.map(async (x) => {
+      const data = await SupabaseCoinRepository.checkRecentRsiAlerts(
+        x.symbol,
+        x.interval
+      ).catch(console.error);
+      return { ...data, x };
+    });
+    const _data = [];
+    for (const promise of promises) {
+      _data.push(await promise);
+    }
+    res.status(200).send(_data);
+  });
+  app.post("/:symbol", async (req, res) => {
+    const { symbol } = req.params;
+    const { rsiValue, emaValue, interval } = req.body;
+    try {
+      await sendWebhook(
+        symbol,
+        rsiValue || null,
+        emaValue || null,
+        Date.now(),
+        interval
+      );
+      res.status(200).send("ok");
+    } catch (e) {
+      console.error("Erro ao enviar webhook:", e);
+      res.status(500).send("Erro interno");
+    }
   });
 
   const port = process.env.API_PORT || 3000;
@@ -145,7 +164,7 @@ const binanceStart = async () => {
     config.intervals,
     config.historyFetchLimit
   );
-  //   return;
+  return;
 
   const streams = symbolsToMonitor.flatMap((symbol) =>
     config.intervals.map(
@@ -356,33 +375,32 @@ const sendWebhook = async (
     return;
   }
   console.log("Verificando se deve enviar alerta", eventSymbol, interval);
-  try {
-    const isSended = await SupabaseCoinRepository.checkRecentRsiAlerts(
-      eventSymbol,
-      interval
-    ).catch(() => null);
-    console.log("Item do alerta", isSended);
-    if (isSended) return;
-    console.log("Enviando alerta", eventSymbol, interval);
-    const id = CoinMap[eventSymbol];
-    if (!id) return;
-
-    await lucaWebhook({
+  const f = (id: string) =>
+    lucaWebhook({
       id,
       rsi,
       ema: currentEMA,
       date: new Date(eventTime),
       interval: interval,
     });
+
+  try {
+    const isSended = await SupabaseCoinRepository.checkRecentRsiAlerts(
+      eventSymbol,
+      interval
+    );
+
+    console.log("Item do alerta", isSended);
+    if (isSended) return;
+
+    console.log("Enviando alerta", eventSymbol, interval);
+    const id = CoinMap[eventSymbol];
+    if (!id) return;
+    await f(id);
   } catch {
     const id = CoinMap[eventSymbol];
-    await lucaWebhook({
-      id,
-      rsi,
-      ema: currentEMA,
-      date: new Date(eventTime),
-      interval: interval,
-    });}
+    await f(id);
+  }
 };
 
 main().catch((error) => {
