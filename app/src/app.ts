@@ -164,7 +164,7 @@ const binanceStart = async () => {
     config.intervals,
     config.historyFetchLimit
   );
-//   return;
+  //   return;
 
   const streams = symbolsToMonitor.flatMap((symbol) =>
     config.intervals.map(
@@ -248,6 +248,10 @@ const handleKlineData = async (klinePayload: KlineEvent): Promise<void> => {
         rsiValue: null,
         previousAverageGain: null,
         previousAverageLoss: null,
+        lastHighPrice: null,
+        lastHighRsi: null,
+        lastLowPrice: null,
+        lastLowRsi: null,
       },
     };
   }
@@ -324,6 +328,98 @@ const handleKlineData = async (klinePayload: KlineEvent): Promise<void> => {
     }
   }
 
+  //#region Calculo divergencia
+  if (tfState.rsiValue) {
+    let stateChanged = false; // Flag para saber se precisamos salvar no banco
+
+    // --- VERIFICA DIVERGÊNCIA DE BAIXA (BEARISH) ---
+    if (tfState.rsiValue > 70) {
+      if (tfState.lastHighPrice && tfState.lastHighRsi) {
+        if (
+          closePrice > tfState.lastHighPrice &&
+          tfState.rsiValue < tfState.lastHighRsi
+        ) {
+          console.log(
+            `%c[ALERTA] DIVERGÊNCIA DE BAIXA DETECTADA para ${eventSymbol}@${interval}! Preço: ${closePrice}, RSI: ${tfState.rsiValue.toFixed(
+              2
+            )}`,
+            "color: red; font-weight: bold;"
+          );
+          // Ação de alerta (ex: webhook)
+        }
+      }
+      if (!tfState.lastHighRsi || tfState.rsiValue > tfState.lastHighRsi) {
+        tfState.lastHighPrice = closePrice;
+        tfState.lastHighRsi = tfState.rsiValue;
+        stateChanged = true;
+        console.log(
+          `%c[INFO] Novo PICO de RSI salvo para ${eventSymbol}@${interval}. Preço: ${
+            tfState.lastHighPrice
+          }, RSI: ${tfState.lastHighRsi.toFixed(2)}`,
+          "color: orange;"
+        );
+      }
+    } else if (tfState.rsiValue < 50 && tfState.lastHighRsi !== null) {
+      // Reseta o último topo quando o RSI sai da zona de sobrecompra
+      tfState.lastHighPrice = null;
+      tfState.lastHighRsi = null;
+      stateChanged = true;
+    }
+
+    // --- VERIFICA DIVERGÊNCIA DE ALTA (BULLISH) ---
+    if (tfState.rsiValue < 30) {
+      if (tfState.lastLowPrice && tfState.lastLowRsi) {
+        if (
+          closePrice < tfState.lastLowPrice &&
+          tfState.rsiValue > tfState.lastLowRsi
+        ) {
+          console.log(
+            `%c[ALERTA] DIVERGÊNCIA DE ALTA DETECTADA para ${eventSymbol}@${interval}! Preço: ${closePrice}, RSI: ${tfState.rsiValue.toFixed(
+              2
+            )}`,
+            "color: green; font-weight: bold;"
+          );
+          // Ação de alerta (ex: webhook)
+        }
+      }
+      if (!tfState.lastLowRsi || tfState.rsiValue < tfState.lastLowRsi) {
+        tfState.lastLowPrice = closePrice;
+        tfState.lastLowRsi = tfState.rsiValue;
+        stateChanged = true;
+        console.log(
+          `%c[INFO] Novo FUNDO de RSI salvo para ${eventSymbol}@${interval}. Preço: ${
+            tfState.lastLowPrice
+          }, RSI: ${tfState.lastLowRsi.toFixed(2)}`,
+          "color: cyan;"
+        );
+      }
+    } else if (tfState.rsiValue > 50 && tfState.lastLowRsi !== null) {
+      // Reseta o último fundo quando o RSI sai da zona de sobrevenda
+      tfState.lastLowPrice = null;
+      tfState.lastLowRsi = null;
+      stateChanged = true;
+    }
+
+    // Se o estado de picos/vales mudou, salva no banco de dados
+    if (stateChanged) {
+      try {
+        await SupabaseCoinRepository.updateIndicatorState(
+          eventSymbol,
+          interval,
+          tfState
+        );
+        console.log(
+          `Estado de divergência para ${eventSymbol}@${interval} salvo no banco.`
+        );
+      } catch (error) {
+        console.error(
+          `Falha ao salvar estado de divergência para ${eventSymbol}@${interval}:`,
+          error
+        );
+      }
+    }
+  }
+  //#endregion Calculo divergencia
   console.log(
     `[${eventSymbol}@${interval}] EMA(${
       config.emaPeriod

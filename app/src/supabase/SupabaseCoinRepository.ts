@@ -29,7 +29,9 @@ async function loadInitialStateForAllSymbols(
   limit: number
 ): Promise<DataSymbolsState> {
   console.log(`Buscando dados iniciais para ${symbols.length} símbolos...`);
-  const { data: _data, error } = await supabase.rpc(
+
+  // 1. Busca o histórico de velas (como antes)
+  const { data: klineData, error: klineError } = await supabase.rpc(
     "get_latest_market_data_for_symbols",
     {
       symbols_to_fetch: symbols,
@@ -38,62 +40,96 @@ async function loadInitialStateForAllSymbols(
     }
   );
 
-  if (error) {
+  if (klineError) {
     console.error(
-      "Erro ao carregar dados iniciais do Supabase via RPC:",
-      error
+      "Erro ao carregar dados históricos do Supabase via RPC:",
+      klineError
     );
-    throw error;
+    throw klineError;
   }
-  const data = _data as CoinHistoricSupabase[];
+
+  const data = klineData as CoinHistoricSupabase[];
   if (!data || data.length === 0) {
-    throw new Error(
-      "Nenhum dado histórico encontrado para os símbolos e intervalos fornecidos."
+    console.warn(
+      "Nenhum dado histórico encontrado. O estado será inicializado vazio."
     );
   }
 
   console.log(
-    `Recebidos ${data.length} registros do banco. Agrupando agora...`
+    `Recebidos ${data.length} registros de velas. Agrupando agora...`
   );
 
-  const groupedState = data.reduce((acc: DataSymbolsState, item) => {
-    const { symbol, interval } = item;
+  const groupedState: DataSymbolsState = {};
 
-    const klineData: HistoricalKlineData = {
-      emaValue: item.ema_value,
-      rsiValue: item.rsi_value,
-      closePrice: item.close_price,
-      openPrice: item.open_price,
-      highPrice: item.high_price,
-      lowPrice: item.low_price,
-      timestamp: item.timestamp,
-    };
-
-    if (!acc[symbol]) {
-      acc[symbol] = {};
-    }
-
-    if (!acc[symbol][interval]) {
-      acc[symbol][interval] = {
+  // Inicializa a estrutura do estado para todos os símbolos e intervalos
+  for (const symbol of symbols) {
+    groupedState[symbol] = {};
+    for (const interval of intervals) {
+      groupedState[symbol][interval] = {
         closePrices: [],
         emaHistory: [],
         previousAverageGain: null,
         previousAverageLoss: null,
         rsiValue: null,
+        // Inicializa os campos de divergência
+        lastHighPrice: null,
+        lastHighRsi: null,
+        lastLowPrice: null,
+        lastLowRsi: null,
       };
     }
+  }
 
-    acc[symbol][interval].closePrices.push(klineData.closePrice);
-
-    if (klineData.emaValue) {
-      acc[symbol][interval].emaHistory.push(klineData.emaValue);
+  // Preenche o estado com os dados das velas
+  data.forEach((item) => {
+    const { symbol, interval } = item;
+    if (groupedState[symbol] && groupedState[symbol][interval]) {
+      groupedState[symbol][interval].closePrices.push(item.close_price);
+      if (item.ema_value) {
+        groupedState[symbol][interval].emaHistory.push(item.ema_value);
+      }
     }
+  });
 
-    return acc;
-  }, {});
+  // 2. Busca o estado salvo dos indicadores (picos e vales) da nova tabela
+  console.log("Buscando estados de indicadores salvos (picos/vales)...");
+  const { data: indicatorStatesData, error: stateError } = await supabase
+    .from("indicator_states")
+    .select(
+      "symbol, interval, last_high_price, last_high_rsi, last_low_price, last_low_rsi"
+    )
+    .in("symbol", symbols);
 
+  if (stateError) {
+    console.error("Erro ao carregar estados de indicadores:", stateError);
+    // Não lançamos um erro aqui, podemos continuar com o estado zerado
+  }
+
+  // 3. Mescla o estado salvo no objeto de estado principal
+  if (indicatorStatesData) {
+    indicatorStatesData.forEach((state) => {
+      const {
+        symbol,
+        interval,
+        last_high_price,
+        last_high_rsi,
+        last_low_price,
+        last_low_rsi,
+      } = state;
+      if (groupedState[symbol] && groupedState[symbol][interval]) {
+        console.log(`Estado salvo encontrado para ${symbol}@${interval}.`);
+        groupedState[symbol][interval].lastHighPrice = last_high_price;
+        groupedState[symbol][interval].lastHighRsi = last_high_rsi;
+        groupedState[symbol][interval].lastLowPrice = last_low_price;
+        groupedState[symbol][interval].lastLowRsi = last_low_rsi;
+      }
+    });
+  }
+
+  console.log("Estado inicial carregado com sucesso.");
   return groupedState;
 }
+
 async function getLastCoinHistoric(
   symbol: string,
   interval: string
@@ -224,6 +260,33 @@ async function saveSymbolIntervalDataToSupabase(
     );
   }
 }
+
+async function updateIndicatorState(
+  symbol: string,
+  interval: string,
+  state: Partial<SymbolTimeframeIndicatorState>
+): Promise<void> {
+  const updateData = {
+    symbol,
+    interval,
+    last_high_price: state.lastHighPrice,
+    last_high_rsi: state.lastHighRsi,
+    last_low_price: state.lastLowPrice,
+    last_low_rsi: state.lastLowRsi,
+  };
+
+  const { error } = await supabase.from("indicator_states").upsert(updateData, {
+    onConflict: "symbol,interval",
+  });
+
+  if (error) {
+    console.error(
+      `Erro ao salvar estado do indicador para ${symbol}@${interval}:`,
+      error
+    );
+    throw error;
+  }
+}
 async function checkRecentRsiAlerts(
   symbol: string,
   interval: string // NOVO PARÂMETRO
@@ -257,4 +320,5 @@ export const SupabaseCoinRepository = {
   loadInitialStateForAllSymbols,
   getLastCoinHistoric,
   checkRecentRsiAlerts,
+  updateIndicatorState,
 };
