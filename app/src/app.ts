@@ -24,7 +24,7 @@ export const config = {
     minVolume24h: 700_000, // 50 mil em volume de USDT
     fallbackSymbols: ["BTCUSDT", "ETHUSDT"], // Símbolos para monitorar se a busca dinâmica estiver desabilitada
   },
-//   intervals: ["5m", "15m", "1h", "4h"],
+  //   intervals: ["5m", "15m", "1h", "4h"],
   intervals: ["5m", "15m", "1h"],
   emaPeriod: 21,
   rsiPeriod: 14,
@@ -226,7 +226,7 @@ const binanceStart = async () => {
       }
     };
     await new Promise((resolve) =>
-      setTimeout(() => resolve(true), 100 * index)
+      setTimeout(() => resolve(true), 50 * index)
     );
     console.log(`${stream} iniciado.`);
     const listen = (tries: number) => {
@@ -401,7 +401,9 @@ const handleKlineData = async (klinePayload: KlineEvent): Promise<void> => {
           date: new Date(eventTime),
           interval: interval,
           type: "BULLISH",
-        });
+        })
+          .then(() => console.log("Webhook de alta enviado com sucesso."))
+          .catch(() => console.error("Erro ao enviar webhook de alta."));
         // ENVIAR WEBHOOK DE COMPRA/ALTA
         // sendDivergenceAlert(...);
         tfState.armedDivergence = null;
@@ -424,7 +426,9 @@ const handleKlineData = async (klinePayload: KlineEvent): Promise<void> => {
           date: new Date(eventTime),
           interval: interval,
           type: "BEARISH",
-        });
+        })
+          .then(() => console.log("Webhook de baixa enviado com sucesso."))
+          .catch(() => console.error("Erro ao enviar webhook de baixa."));
       }
     }
   }
