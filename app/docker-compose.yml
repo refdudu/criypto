@@ -6,6 +6,10 @@ services:
     # Constrói a imagem a partir do Dockerfile na pasta atual (.)
     build: .
     # Nome da imagem que será criada
+
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
     image: crypto-bot-app
     # Nome do container que será executado
     container_name: crypto-bot-container
