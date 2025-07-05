@@ -86,7 +86,7 @@ const sendWebhook = async (
       interval
     );
 
-    console.log("Item do alerta", isSended);
+    console.log("Item do alerta", Boolean(isSended));
     if (isSended) return;
 
     console.log("Enviando alerta", eventSymbol, interval);
