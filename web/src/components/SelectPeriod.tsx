@@ -3,13 +3,13 @@ interface HeaderProps {
   selectedInterval: string | null;
   changeSelectedInterval: (interval: string | null) => void;
 }
-export const Header = ({
+export const SelectPeriod = ({
   intervals,
   selectedInterval,
   changeSelectedInterval,
 }: HeaderProps) => {
   return (
-    <header className="h-16 flex px-4 items-center bg-gray-800">
+    <div className="p-4bg-gray-800">
       <select
         value={selectedInterval || ""}
         onChange={(e) => changeSelectedInterval(e.target.value)}
@@ -21,6 +21,6 @@ export const Header = ({
           </option>
         ))}
       </select>
-    </header>
+    </div>
   );
 };

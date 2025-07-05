@@ -60,6 +60,33 @@ const getCoinLastInterval = async (): Promise<CoinHistoric[]> => {
     return order.indexOf(a.interval) - order.indexOf(b.interval);
   });
 };
+
+const getAllCoinsWithLastIndicatorState = async () => {
+  const { data, error } = await supabase
+    .from("distinct_coins_with_latest_indicator")
+    .select("*");
+
+  if (error) {
+    console.error("Error fetching coins:", error);
+    return [];
+  }
+
+  return data as Coin[];
+};
+const getAllCoinsWithIndicatorStates = async () => {
+  const { data, error } = await supabase
+    .from("coins")
+    .select("*, indicator_states(*)")
+    .order("created_at", { ascending: false })
+    .order("timestamp", { foreignTable: "indicator_states", ascending: false });
+
+  if (error) {
+    console.error("Error fetching coins with all indicator states:", error);
+    return [];
+  }
+
+  return data as Coin[];
+};
 const getIntervalsAlert = async (): Promise<CoinHistoric[]> => {
   const { data, error } = await supabase
     .from("market_data")
@@ -149,4 +176,6 @@ export const SupabaseCoinService = {
   getCoinLastInterval,
   getIntervalsAlert,
   watchIntervals,
+  getAllCoinsWithLastIndicatorState,
+  getAllCoinsWithIndicatorStates,
 };

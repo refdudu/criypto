@@ -6,6 +6,7 @@ import type {
   Coin,
   CoinHistoric,
 } from "../services/supabase/SupabaseCoinService";
+import { SelectPeriod } from "../components/SelectPeriod";
 
 export const HomePage = () => {
   const [type, setType] = useState<"coins" | "alerts">("coins");
@@ -43,6 +44,11 @@ export const HomePage = () => {
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
             className="bg-gray-700 p-2 rounded"
+          />
+          <SelectPeriod
+            changeSelectedInterval={() => {}}
+            intervals={["5m", "15m", "30m", "1h", "4h", "1d"]}
+            selectedInterval={null}
           />
         </div>
         <div className="flex items-center gap-4">
