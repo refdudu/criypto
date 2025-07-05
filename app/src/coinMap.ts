@@ -89,7 +89,7 @@ export const CoinMap: Record<string, string> = {
   EURUSDT: "tether-eurt",
   FDUSDUSDT: "first-digital-usd",
   FETUSDT: "artificial-superintelligence-alliance",
-  FIDAUSDT: "solana-name-service-prev-bonfida",
+  FIDAUSDT: "cardano",
   FILUSDT: "filecoin",
   FISUSDT: "stafi",
   FLOKIUSDT: "floki",
