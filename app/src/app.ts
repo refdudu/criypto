@@ -34,6 +34,8 @@ let indicatorStates: DataSymbolsState = {};
 
 // --- Função para Buscar Top Gainers (Mantida) ---
 
+const coinIgnore = ['OMUSDT']
+
 async function getTopGainersFromBinance(
   binance: Binance,
   //   topN: number,
@@ -51,7 +53,8 @@ async function getTopGainersFromBinance(
       .filter(
         (ticker) =>
           ticker.symbol.endsWith(quoteAsset) &&
-          parseFloat(ticker.quoteVolume) > minVolume
+          parseFloat(ticker.quoteVolume) > minVolume&&
+          !coinIgnore.includes(ticker.symbol)
       )
       .map((ticker) => ({
         symbol: ticker.symbol,

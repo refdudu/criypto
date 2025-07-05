@@ -71,7 +71,7 @@ const sendWebhook = async (
   if (!intervals.includes(interval)) return;
   if (!rsi || (rsi >= 30 && rsi <= 70)) return;
 
-  console.log("Verificando se deve enviar alerta", eventSymbol, interval);
+//   console.log("Verificando se deve enviar alerta", eventSymbol, interval);
   const f = (id: string) =>
     lucaWebhook({
       id,
