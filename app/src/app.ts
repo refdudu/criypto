@@ -351,16 +351,24 @@ const handleKlineData = async (klinePayload: KlineEvent): Promise<void> => {
           `%c[ALERTA CONFIRMADO] DIVERGÊNCIA DE ALTA para ${eventSymbol}@${interval}! Preço rompeu ${confirmationPrice}`,
           "color: green; font-weight: bold;"
         );
-        webhook({
-          id: CoinMap[eventSymbol],
-          rsi: tfState.rsiValue,
-          ema: tfState.emaValue,
-          date: new Date(eventTime),
-          interval: interval,
-          type: "BULLISH",
-        })
-          .then(() => console.log("Webhook de alta enviado com sucesso."))
-          .catch(() => console.error("Erro ao enviar webhook de alta."));
+
+        enqueueWebhook(
+          eventSymbol,
+          tfState.rsiValue,
+          tfState.emaValue,
+          eventTime,
+          interval
+        );
+        // webhook({
+        //   id: CoinMap[eventSymbol],
+        //   rsi: tfState.rsiValue,
+        //   ema: tfState.emaValue,
+        //   date: new Date(eventTime),
+        //   interval: interval,
+        //   type: "BULLISH",
+        // })
+        //   .then(() => console.log("Webhook de alta enviado com sucesso."))
+        //   .catch(() => console.error("Erro ao enviar webhook de alta."));
         // ENVIAR WEBHOOK DE COMPRA/ALTA
         // sendDivergenceAlert(...);
         tfState.armedDivergence = null;
@@ -376,16 +384,13 @@ const handleKlineData = async (klinePayload: KlineEvent): Promise<void> => {
         tfState.armedDivergence = null;
         tfState.lastHigh = null;
         stateChanged = true;
-        webhook({
-          id: CoinMap[eventSymbol],
-          rsi: tfState.rsiValue,
-          ema: tfState.emaValue,
-          date: new Date(eventTime),
-          interval: interval,
-          type: "BEARISH",
-        })
-          .then(() => console.log("Webhook de baixa enviado com sucesso."))
-          .catch(() => console.error("Erro ao enviar webhook de baixa."));
+        enqueueWebhook(
+          eventSymbol,
+          tfState.rsiValue,
+          tfState.emaValue,
+          eventTime,
+          interval
+        );
       }
     }
   }
@@ -475,13 +480,13 @@ const handleKlineData = async (klinePayload: KlineEvent): Promise<void> => {
       interval,
       newKlineData
     ).catch((e) => console.error("Falha ao salvar histórico:", e));
-    enqueueWebhook(
-      eventSymbol,
-      tfState.rsiValue,
-      tfState.emaValue,
-      eventTime,
-      interval
-    );
+    // enqueueWebhook(
+    //   eventSymbol,
+    //   tfState.rsiValue,
+    //   tfState.emaValue,
+    //   eventTime,
+    //   interval
+    // );
   } catch {}
 };
 

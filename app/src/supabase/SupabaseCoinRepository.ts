@@ -289,7 +289,7 @@ async function updateIndicatorState(
     last_high_timestamp: state.lastHigh
       ? new Date(state.lastHigh.timestamp).toISOString()
       : null,
-    last_low_price: state.lastLow?.price,
+    last_low_price: state.lastLow?.price, 
     last_low_rsi: state.lastLow?.rsi,
     last_low_timestamp: state.lastLow
       ? new Date(state.lastLow.timestamp).toISOString()
