@@ -63,6 +63,7 @@ async function getTopGainersFromBinance(
       .sort((a, b) => b.priceChangePercent - a.priceChangePercent);
 
     const topGainers = filteredAndSorted.map((t) => t.symbol);
+    console.log(topGainers)
     //
 
     if (topGainers.length === 0) {
