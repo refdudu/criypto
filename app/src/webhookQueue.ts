@@ -1,6 +1,6 @@
 import { CoinMap } from "./coinMap";
-import { lucaWebhook } from "./lucaWebhook";
 import { SupabaseCoinRepository } from "./supabase/SupabaseCoinRepository";
+import { lucaWebhook } from "./webhook";
 
 const webhookQueue: Array<{
   eventSymbol: string;

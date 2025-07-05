@@ -4,16 +4,13 @@ import {
   BinanceDailyStat,
   HistoricalKlineData,
   KlineEvent,
-  SymbolTimeframeIndicatorState,
 } from "./interfaces";
 import "dotenv/config";
 import {
   DataSymbolsState,
   SupabaseCoinRepository,
 } from "./supabase/SupabaseCoinRepository";
-import { CoinMap } from "./coinMap";
-import { webhook } from "./webhook";
-import { enqueueWebhook } from "./queue";
+import { enqueueWebhook } from "./webhookQueue";
 
 export const config = {
   dynamicSymbols: {
