@@ -11,6 +11,7 @@ import {
   SupabaseCoinRepository,
 } from "./supabase/SupabaseCoinRepository";
 import { enqueueWebhook } from "./webhookQueue";
+import { enqueueSaveSymbolIntervalData } from "./saveSymbolIntervalDataQueue";
 
 export const config = {
   dynamicSymbols: {
@@ -472,11 +473,11 @@ const handleKlineData = async (klinePayload: KlineEvent): Promise<void> => {
   }
 
   try {
-    await SupabaseCoinRepository.saveSymbolIntervalData(
+    enqueueSaveSymbolIntervalData(
       eventSymbol,
       interval,
       newKlineData
-    ).catch((e) => console.error("Falha ao salvar histórico:", e));
+    );
     // enqueueWebhook(
     //   eventSymbol,
     //   tfState.rsiValue,
