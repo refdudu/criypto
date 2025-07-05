@@ -226,7 +226,12 @@ async function saveSymbolIntervalDataToSupabase(
   klineDataForHistory: HistoricalKlineData
 ): Promise<void> {
   try {
-    const insertError = await supabase.from("market_data").insert({
+    // Use the timestamp from the kline data for accuracy. Fallback to now() if not present.
+    const timestampToSave = klineDataForHistory.timestamp
+      ? new Date(klineDataForHistory.timestamp).toISOString()
+      : new Date().toISOString();
+
+    const { error: insertError } = await supabase.from("market_data").insert({
       symbol,
       interval,
       ema_value: klineDataForHistory.emaValue,
@@ -235,15 +240,12 @@ async function saveSymbolIntervalDataToSupabase(
       open_price: klineDataForHistory.openPrice,
       high_price: klineDataForHistory.highPrice,
       low_price: klineDataForHistory.lowPrice,
-      timestamp: new Date().toISOString(),
+      timestamp: timestampToSave, // Use the correct timestamp from the kline data
     });
 
-    if (insertError.error) {
-      console.error(
-        "Error inserting historical kline data:",
-        insertError.error
-      );
-      throw insertError.error;
+    if (insertError) {
+      console.error("Error inserting historical kline data:", insertError);
+      throw insertError;
     }
 
     const summaryData: any = {
@@ -251,7 +253,7 @@ async function saveSymbolIntervalDataToSupabase(
     };
 
     if (interval === "5m") {
-      summaryData.last_timestamp = new Date().toISOString();
+      summaryData.last_timestamp = timestampToSave;
       summaryData.last_close_price = klineDataForHistory.closePrice;
       summaryData.last_open_price = klineDataForHistory.openPrice;
       summaryData.last_high_price = klineDataForHistory.highPrice;
@@ -267,7 +269,7 @@ async function saveSymbolIntervalDataToSupabase(
     if (upsertError) {
       console.error("Error upserting symbol summary data:", upsertError);
       throw upsertError;
-    }   
+    }
   } catch (error) {
     console.error(
       `Failed to save state for ${symbol}@${interval} to Supabase:`,
@@ -289,7 +291,7 @@ async function updateIndicatorState(
     last_high_timestamp: state.lastHigh
       ? new Date(state.lastHigh.timestamp).toISOString()
       : null,
-    last_low_price: state.lastLow?.price, 
+    last_low_price: state.lastLow?.price,
     last_low_rsi: state.lastLow?.rsi,
     last_low_timestamp: state.lastLow
       ? new Date(state.lastLow.timestamp).toISOString()
@@ -315,11 +317,11 @@ async function updateIndicatorState(
 }
 async function checkRecentRsiAlerts(
   symbol: string,
-  interval: string // NOVO PARÂMETRO
+  interval: string
 ): Promise<any> {
   const { data, error } = await supabase.rpc("get_recent_rsi_alerts", {
     p_symbol: symbol,
-    p_interval: interval, // NOVO PARÂMETRO
+    p_interval: interval,
   });
 
   if (error) {
@@ -331,13 +333,20 @@ async function checkRecentRsiAlerts(
 }
 
 async function createSymbolObserve(symbol: string): Promise<void> {
-  const insertResponse = await supabase.from("symbols_observe").insert({
-    symbol,
-    status: ObserveSymbolStatusEnum.observing,
-  });
-  if (insertResponse.error) throw new Error(insertResponse.error.message);
+  const { error } = await supabase.from("symbols_observe").upsert(
+    {
+      symbol,
+      status: ObserveSymbolStatusEnum.observing,
+    },
+    { onConflict: "symbol" } // Assumes 'symbol' is the primary key or has a UNIQUE constraint
+  );
 
-  console.log(`Symbol ${symbol} is now being observed.`);
+  if (error) {
+    console.error(`Error upserting symbol ${symbol} to observe list:`, error);
+    throw new Error(error.message);
+  }
+
+  console.log(`Symbol ${symbol} is now being observed (or was already).`);
 }
 
 export const SupabaseCoinRepository = {
