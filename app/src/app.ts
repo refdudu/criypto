@@ -2,7 +2,6 @@ import Binance from "node-binance-api";
 import express from "express";
 import {
   BinanceDailyStat,
-  BinancePrevDayResponse,
   HistoricalKlineData,
   KlineEvent,
   SymbolTimeframeIndicatorState,
@@ -12,9 +11,9 @@ import {
   DataSymbolsState,
   SupabaseCoinRepository,
 } from "./supabase/SupabaseCoinRepository";
-import { lucaWebhook } from "./lucaWebhook";
 import { CoinMap } from "./coinMap";
 import { webhook } from "./webhook";
+import { enqueueWebhook } from "./queue";
 
 export const config = {
   dynamicSymbols: {
@@ -31,51 +30,11 @@ export const config = {
   historyFetchLimit: 200,
 };
 
-const webhookQueue: Array<{
-  eventSymbol: string;
-  rsi: number | null;
-  currentEMA: number;
-  eventTime: number;
-  interval: string;
-}> = [];
-let isProcessingQueue = false;
-
 // --- Estado em Memória para os Indicadores ---
 // Mantém os valores necessários para o cálculo contínuo (suavizado) do RSI
 let indicatorStates: DataSymbolsState = {};
 
 // --- Função para Buscar Top Gainers (Mantida) ---
-
-function enqueueWebhook(
-  eventSymbol: string,
-  rsi: number | null,
-  currentEMA: number,
-  eventTime: number,
-  interval: string
-) {
-  webhookQueue.push({ eventSymbol, rsi, currentEMA, eventTime, interval });
-  processWebhookQueue();
-}
-
-async function processWebhookQueue() {
-  if (isProcessingQueue) return;
-  isProcessingQueue = true;
-  while (webhookQueue.length > 0) {
-    const item = webhookQueue.shift();
-    if (item) {
-      await sendWebhook(
-        item.eventSymbol,
-        item.rsi,
-        item.currentEMA,
-        item.eventTime,
-        item.interval
-      );
-      // Aguarda 1 minuto antes de processar o próximo
-      await new Promise((resolve) => setTimeout(resolve, 60_000));
-    }
-  }
-  isProcessingQueue = false;
-}
 
 async function getTopGainersFromBinance(
   binance: Binance,
@@ -161,23 +120,23 @@ const server = () => {
     }
     res.status(200).send(_data);
   });
-  app.post("/:symbol", async (req, res) => {
-    const { symbol } = req.params;
-    const { rsiValue, emaValue, interval } = req.body;
-    try {
-      await sendWebhook(
-        symbol,
-        rsiValue || null,
-        emaValue || null,
-        Date.now(),
-        interval
-      );
-      res.status(200).send("ok");
-    } catch (e) {
-      console.error("Erro ao enviar webhook:", e);
-      res.status(500).send("Erro interno");
-    }
-  });
+  //   app.post("/:symbol", async (req, res) => {
+  //     const { symbol } = req.params;
+  //     const { rsiValue, emaValue, interval } = req.body;
+  //     try {
+  //       await sendWebhook(
+  //         symbol,
+  //         rsiValue || null,
+  //         emaValue || null,
+  //         Date.now(),
+  //         interval
+  //       );
+  //       res.status(200).send("ok");
+  //     } catch (e) {
+  //       console.error("Erro ao enviar webhook:", e);
+  //       res.status(500).send("Erro interno");
+  //     }
+  //   });
 
   const port = process.env.API_PORT || 3000;
   const listener = app.listen(port, () => console.log(listener.address()));
@@ -510,7 +469,6 @@ const handleKlineData = async (klinePayload: KlineEvent): Promise<void> => {
     ).catch((e) => console.error("Falha ao salvar estado:", e));
   }
 
-  // 5. Salvar histórico e chamar webhook original
   try {
     await SupabaseCoinRepository.saveSymbolIntervalData(
       eventSymbol,
@@ -525,48 +483,6 @@ const handleKlineData = async (klinePayload: KlineEvent): Promise<void> => {
       interval
     );
   } catch {}
-};
-
-const sendWebhook = async (
-  eventSymbol: string,
-  rsi: number | null,
-  currentEMA: number,
-  eventTime: number,
-  interval: string
-) => {
-  const intervals = ["15m", "1h", "4h"];
-  if (!intervals.includes(interval)) return;
-
-  if (!rsi || (rsi >= 30 && rsi <= 70)) {
-    return;
-  }
-  console.log("Verificando se deve enviar alerta", eventSymbol, interval);
-  const f = (id: string) =>
-    lucaWebhook({
-      id,
-      rsi,
-      ema: currentEMA,
-      date: new Date(eventTime),
-      interval: interval,
-    });
-
-  try {
-    const isSended = await SupabaseCoinRepository.checkRecentRsiAlerts(
-      eventSymbol,
-      interval
-    );
-
-    console.log("Item do alerta", isSended);
-    if (isSended) return;
-
-    console.log("Enviando alerta", eventSymbol, interval);
-    const id = CoinMap[eventSymbol];
-    if (!id) return;
-    await f(id);
-  } catch {
-    const id = CoinMap[eventSymbol];
-    await f(id);
-  }
 };
 
 main().catch((error) => {
