@@ -17,6 +17,7 @@ async function processSaveSymbolIntervalDataQueue() {
     const task = saveSymbolIntervalDataQueue.shift();
     if (task) {
       try {
+        console.log("Processing save task:", task.eventSymbol, task.interval);
         await SupabaseCoinRepository.saveSymbolIntervalData(
           task.eventSymbol,
           task.interval,
@@ -36,6 +37,7 @@ export const enqueueSaveSymbolIntervalData = (
   interval: string,
   newKlineData: HistoricalKlineData
 ) => {
+  console.log("Enqueueing save task:", eventSymbol, interval, newKlineData);
   saveSymbolIntervalDataQueue.push({ eventSymbol, interval, newKlineData });
   processSaveSymbolIntervalDataQueue();
 };

@@ -18,6 +18,14 @@ export const enqueueWebhook = (
   eventTime: number,
   interval: string
 ) => {
+  console.log(
+    "Enqueueing webhook task:",
+    eventSymbol,
+    rsi,
+    currentEMA,
+    eventTime,
+    interval
+  );
   webhookQueue.push({ eventSymbol, rsi, currentEMA, eventTime, interval });
   processWebhookQueue();
 };
@@ -28,6 +36,14 @@ const processWebhookQueue = async () => {
   while (webhookQueue.length > 0) {
     const item = webhookQueue.shift();
     if (item) {
+      console.log(
+        "Processing webhook task:",
+        item.eventSymbol,
+        item.rsi,
+        item.currentEMA,
+        item.eventTime,
+        item.interval
+      );
       await sendWebhook(
         item.eventSymbol,
         item.rsi,

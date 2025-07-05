@@ -465,27 +465,13 @@ const handleKlineData = async (klinePayload: KlineEvent): Promise<void> => {
 
   // 4. PERSISTIR O ESTADO SE HOUVE MUDANÇA
   if (stateChanged) {
-    await SupabaseCoinRepository.updateIndicatorState(
-      eventSymbol,
-      interval,
-      tfState
-    ).catch((e) => console.error("Falha ao salvar estado:", e));
+    SupabaseCoinRepository.updateIndicatorState(eventSymbol, interval, tfState)
+      .catch((e) => console.error("Falha ao salvar estado:", e))
+      .then(() =>
+        console.log(`Estado atualizado para ${eventSymbol}@${interval}`)
+      );
   }
-
-  try {
-    enqueueSaveSymbolIntervalData(
-      eventSymbol,
-      interval,
-      newKlineData
-    );
-    // enqueueWebhook(
-    //   eventSymbol,
-    //   tfState.rsiValue,
-    //   tfState.emaValue,
-    //   eventTime,
-    //   interval
-    // );
-  } catch {}
+  enqueueSaveSymbolIntervalData(eventSymbol, interval, newKlineData);
 };
 
 main().catch((error) => {
