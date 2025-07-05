@@ -11,6 +11,21 @@ export interface Coin {
   rsiValue: number;
   timestamp: string;
   intervals: CoinHistoric[];
+  indicator_states: IndicatorState[];
+}
+export interface IndicatorState {
+  armed_at_timestamp: string | null;
+  armed_confirmation_price: number | null;
+  armed_divergence_type: string | null;
+  interval: string;
+  last_high_price: number | null;
+  last_high_rsi: number | null;
+  last_high_timestamp: string | null;
+  last_low_price: number | null;
+  last_low_rsi: number | null;
+  last_low_timestamp: string | null;
+  symbol: string;
+  updated_at: string;
 }
 
 export interface CoinHistoric {
@@ -35,6 +50,7 @@ const mapSupabaseToCoin = (data: any, intervals: CoinHistoric[]): Coin => ({
   rsiValue: data.last_rsi_value,
   timestamp: new Date(data.last_timestamp).toLocaleString(),
   intervals: intervals.filter((x) => x.coinId === data.symbol),
+  indicator_states: [],
 });
 const mapCoinHistoric: (value: any) => CoinHistoric = (item) => ({
   closePrice: item.close_price,
@@ -61,32 +77,6 @@ const getCoinLastInterval = async (): Promise<CoinHistoric[]> => {
   });
 };
 
-const getAllCoinsWithLastIndicatorState = async () => {
-  const { data, error } = await supabase
-    .from("distinct_coins_with_latest_indicator")
-    .select("*");
-
-  if (error) {
-    console.error("Error fetching coins:", error);
-    return [];
-  }
-
-  return data as Coin[];
-};
-const getAllCoinsWithIndicatorStates = async () => {
-  const { data, error } = await supabase
-    .from("coins")
-    .select("*, indicator_states(*)")
-    .order("created_at", { ascending: false })
-    .order("timestamp", { foreignTable: "indicator_states", ascending: false });
-
-  if (error) {
-    console.error("Error fetching coins with all indicator states:", error);
-    return [];
-  }
-
-  return data as Coin[];
-};
 const getIntervalsAlert = async (): Promise<CoinHistoric[]> => {
   const { data, error } = await supabase
     .from("market_data")
@@ -176,6 +166,4 @@ export const SupabaseCoinService = {
   getCoinLastInterval,
   getIntervalsAlert,
   watchIntervals,
-  getAllCoinsWithLastIndicatorState,
-  getAllCoinsWithIndicatorStates,
 };

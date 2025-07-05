@@ -1,15 +1,17 @@
 import moment from "moment";
 import { useCoinContext } from "../contexts/CoinContext";
 import classNames from "classnames";
-import { useMemo, useState, type Dispatch } from "react";
+import { useMemo, useState, type Dispatch, type ReactNode } from "react";
 import type {
   Coin,
   CoinHistoric,
 } from "../services/supabase/SupabaseCoinService";
 import { SelectPeriod } from "../components/SelectPeriod";
 
+type PageType = "coins" | "alerts" | "analysis";
+
 export const HomePage = () => {
-  const [type, setType] = useState<"coins" | "alerts">("coins");
+  const [type, setType] = useState<PageType>("coins");
   const [inputText, setInputText] = useState("");
   const { coins, rsiHistoric, setSelectedCoin } = useCoinContext();
 
@@ -33,6 +35,23 @@ export const HomePage = () => {
     return { _coins, _rsiHistoric };
   }, [coins, rsiHistoric, inputText]);
 
+  const ButtonHeader = ({
+    children,
+    type,
+  }: {
+    children: ReactNode;
+    type: PageType;
+  }) => (
+    <button
+      onClick={() => setType(type)}
+      className={classNames("text-white p-2 rounded", {
+        "bg-gray-500": type === "alerts",
+        "bg-gray-700": type !== "alerts",
+      })}
+    >
+      {children}
+    </button>
+  );
   return (
     <div>
       <header className="flex items-center justify-between gap-4 h-16 px-4 bg-gray-800 c">
@@ -52,24 +71,9 @@ export const HomePage = () => {
           />
         </div>
         <div className="flex items-center gap-4">
-          <button
-            onClick={() => setType("alerts")}
-            className={classNames("text-white p-2 rounded", {
-              "bg-gray-500": type === "alerts",
-              "bg-gray-700": type !== "alerts",
-            })}
-          >
-            Alertas
-          </button>
-          <button
-            onClick={() => setType("coins")}
-            className={classNames("text-white p-2 rounded", {
-              "bg-gray-500": type === "coins",
-              "bg-gray-700": type !== "coins",
-            })}
-          >
-            Tempo real
-          </button>
+          <ButtonHeader type="alerts">Alertas</ButtonHeader>
+          {/* <ButtonHeader type="analysis">Análise</ButtonHeader> */}
+          <ButtonHeader type="coins">Tempo real</ButtonHeader>
         </div>
       </header>
       {type === "coins" && (
