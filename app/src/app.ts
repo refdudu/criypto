@@ -327,6 +327,7 @@ const handleKlineData = async (klinePayload: KlineEvent): Promise<void> => {
     newKlineData.rsiValue = rsi;
   }
 
+  enqueueSaveSymbolIntervalData(eventSymbol, interval, newKlineData);
   if (!tfState.rsiValue) return; // Precisa de RSI para continuar
 
   // 2. LÓGICA DE CONFIRMAÇÃO DE DIVERGÊNCIA ARMADA
@@ -357,18 +358,6 @@ const handleKlineData = async (klinePayload: KlineEvent): Promise<void> => {
           eventTime,
           interval
         );
-        // webhook({
-        //   id: CoinMap[eventSymbol],
-        //   rsi: tfState.rsiValue,
-        //   ema: tfState.emaValue,
-        //   date: new Date(eventTime),
-        //   interval: interval,
-        //   type: "BULLISH",
-        // })
-        //   .then(() => console.log("Webhook de alta enviado com sucesso."))
-        //   .catch(() => console.error("Erro ao enviar webhook de alta."));
-        // ENVIAR WEBHOOK DE COMPRA/ALTA
-        // sendDivergenceAlert(...);
         tfState.armedDivergence = null;
         tfState.lastLow = null;
         stateChanged = true;
@@ -377,8 +366,6 @@ const handleKlineData = async (klinePayload: KlineEvent): Promise<void> => {
           `%c[ALERTA CONFIRMADO] DIVERGÊNCIA DE BAIXA para ${eventSymbol}@${interval}! Preço rompeu ${confirmationPrice}`,
           "color: red; font-weight: bold;"
         );
-        // ENVIAR WEBHOOK DE VENDA/BAIXA
-        // sendDivergenceAlert(...);
         tfState.armedDivergence = null;
         tfState.lastHigh = null;
         stateChanged = true;
@@ -471,7 +458,6 @@ const handleKlineData = async (klinePayload: KlineEvent): Promise<void> => {
         console.log(`Estado atualizado para ${eventSymbol}@${interval}`)
       );
   }
-  enqueueSaveSymbolIntervalData(eventSymbol, interval, newKlineData);
 };
 
 main().catch((error) => {
