@@ -11,6 +11,8 @@ const webhookQueue: Array<{
 }> = [];
 let isProcessingQueue = false;
 
+const intervals = ["15m", "1h", "4h"];
+
 export const enqueueWebhook = (
   eventSymbol: string,
   rsi: number | null,
@@ -18,9 +20,8 @@ export const enqueueWebhook = (
   eventTime: number,
   interval: string
 ) => {
-  const intervals = ["15m", "1h", "4h"];
   if (!intervals.includes(interval)) return;
-  
+
   console.log(
     "Enqueueing webhook task:",
     eventSymbol,
@@ -67,12 +68,9 @@ const sendWebhook = async (
   eventTime: number,
   interval: string
 ) => {
-  const intervals = ["15m", "1h", "4h"];
   if (!intervals.includes(interval)) return;
+  if (!rsi || (rsi >= 30 && rsi <= 70)) return;
 
-  if (!rsi || (rsi >= 30 && rsi <= 70)) {
-    return;
-  }
   console.log("Verificando se deve enviar alerta", eventSymbol, interval);
   const f = (id: string) =>
     lucaWebhook({
@@ -84,13 +82,13 @@ const sendWebhook = async (
     });
 
   try {
-    const isSended = await SupabaseCoinRepository.checkRecentRsiAlerts(
-      eventSymbol,
-      interval
-    );
+    // const isSended = await SupabaseCoinRepository.checkRecentRsiAlerts(
+    //   eventSymbol,
+    //   interval
+    // );
 
-    console.log("Item do alerta", Boolean(isSended));
-    if (isSended) return;
+    // console.log("Item do alerta", Boolean(isSended));
+    // if (isSended) return;
 
     console.log("Enviando alerta", eventSymbol, interval);
     const id = CoinMap[eventSymbol];
