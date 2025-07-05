@@ -37,7 +37,7 @@ export const enqueueSaveSymbolIntervalData = (
   interval: string,
   newKlineData: HistoricalKlineData
 ) => {
-  console.log("Enqueueing save task:", eventSymbol, interval, newKlineData);
+//   console.log("Enqueueing save task:", eventSymbol, interval, newKlineData);
   saveSymbolIntervalDataQueue.push({ eventSymbol, interval, newKlineData });
   processSaveSymbolIntervalDataQueue();
 };
