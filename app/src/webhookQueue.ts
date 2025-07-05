@@ -18,6 +18,9 @@ export const enqueueWebhook = (
   eventTime: number,
   interval: string
 ) => {
+  const intervals = ["15m", "1h", "4h"];
+  if (!intervals.includes(interval)) return;
+  
   console.log(
     "Enqueueing webhook task:",
     eventSymbol,
