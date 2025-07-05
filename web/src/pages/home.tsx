@@ -37,16 +37,16 @@ export const HomePage = () => {
 
   const ButtonHeader = ({
     children,
-    type,
+    type: _type,
   }: {
     children: ReactNode;
     type: PageType;
   }) => (
     <button
-      onClick={() => setType(type)}
+      onClick={() => setType(_type)}
       className={classNames("text-white p-2 rounded", {
-        "bg-gray-500": type === "alerts",
-        "bg-gray-700": type !== "alerts",
+        "bg-gray-500": type === _type,
+        "bg-gray-700": type !== _type,
       })}
     >
       {children}
