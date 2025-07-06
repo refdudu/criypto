@@ -24,12 +24,12 @@ async function processSaveSymbolIntervalDataQueue() {
           task.newKlineData
         );
       } catch (e) {
-        enqueueSaveSymbolIntervalData(
-          task.eventSymbol,
-          task.interval,
-          task.newKlineData
+        console.error(
+          "Falha ao salvar histórico. A tarefa será tentada novamente:",
+          e
         );
-        console.error("Falha ao salvar histórico:", e);
+        saveSymbolIntervalDataQueue.push(task);
+        await new Promise((resolve) => setTimeout(resolve, 500));
       }
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
