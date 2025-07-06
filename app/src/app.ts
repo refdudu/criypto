@@ -14,7 +14,7 @@ import {
 } from "./supabase/SupabaseCoinRepository";
 
 import { saveKlineQueue } from "./queues/saveKlineQueue";
-import { webhookQueue } from "./queues/WebhookQueue";
+import { webhookQueue } from "./queues/webhookQueue";
 import { updateIndicatorQueue } from "./queues/updateIndicatorQueue";
 
 export const config = {
