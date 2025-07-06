@@ -15,15 +15,8 @@ export const webhook = async (url: string, body: object) => {
   }
 };
 
-export const webhookList = async (body: {
-  id: string;
-  rsi: number;
-  ema: number;
-  date: Date;
-  interval: string;
-}) => {
+export const webhookList = async (body: object) => {
   if (process.env.LUCA_WEBHOOK_URL)
     webhook(process.env.LUCA_WEBHOOK_URL || "", body);
-
   if (process.env.WEBHOOK_SITE) webhook(process.env.WEBHOOK_SITE || "", body);
 };

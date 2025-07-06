@@ -10,8 +10,10 @@ import {
   DataSymbolsState,
   SupabaseCoinRepository,
 } from "./supabase/SupabaseCoinRepository";
-import { enqueueWebhook } from "./webhookQueue";
 import { enqueueSaveSymbolIntervalData } from "./saveSymbolIntervalDataQueue";
+import { saveKlineQueue } from "./queues/saveKlineQueue";
+import { webhookQueue } from "./queues/WebhookQueue";
+import { updateIndicatorQueue } from "./queues/updateIndicatorQueue";
 
 export const config = {
   dynamicSymbols: {
@@ -34,7 +36,7 @@ let indicatorStates: DataSymbolsState = {};
 
 // --- Função para Buscar Top Gainers (Mantida) ---
 
-const coinIgnore = ['OMUSDT']
+const coinIgnore = ["OMUSDT"];
 
 async function getTopGainersFromBinance(
   binance: Binance,
@@ -53,7 +55,7 @@ async function getTopGainersFromBinance(
       .filter(
         (ticker) =>
           ticker.symbol.endsWith(quoteAsset) &&
-          parseFloat(ticker.quoteVolume) > minVolume&&
+          parseFloat(ticker.quoteVolume) > minVolume &&
           !coinIgnore.includes(ticker.symbol)
       )
       .map((ticker) => ({
@@ -63,7 +65,7 @@ async function getTopGainersFromBinance(
       .sort((a, b) => b.priceChangePercent - a.priceChangePercent);
 
     const topGainers = filteredAndSorted.map((t) => t.symbol);
-    console.log(topGainers)
+    console.log(topGainers);
     //
 
     if (topGainers.length === 0) {
@@ -331,7 +333,7 @@ const handleKlineData = async (klinePayload: KlineEvent): Promise<void> => {
     newKlineData.rsiValue = rsi;
   }
 
-  enqueueSaveSymbolIntervalData(eventSymbol, interval, newKlineData);
+  saveKlineQueue.enqueue({ eventSymbol, interval, newKlineData });
   if (!tfState.rsiValue) return; // Precisa de RSI para continuar
 
   // 2. LÓGICA DE CONFIRMAÇÃO DE DIVERGÊNCIA ARMADA
@@ -349,19 +351,25 @@ const handleKlineData = async (klinePayload: KlineEvent): Promise<void> => {
       tfState.armedDivergence = null;
       stateChanged = true;
     } else {
+      const enqueueWebhook = () => {
+        if (interval !== "5m")
+          webhookQueue.enqueue({
+            eventSymbol,
+            rsi: tfState.rsiValue,
+            ema: tfState.emaValue,
+            date: eventTime,
+            interval,
+          });
+      };
+
       if (type === "BULLISH" && highPrice > confirmationPrice) {
         console.log(
           `%c[ALERTA CONFIRMADO] DIVERGÊNCIA DE ALTA para ${eventSymbol}@${interval}! Preço rompeu ${confirmationPrice}`,
           "color: green; font-weight: bold;"
         );
 
-        enqueueWebhook(
-          eventSymbol,
-          tfState.rsiValue,
-          tfState.emaValue,
-          eventTime,
-          interval
-        );
+        enqueueWebhook();
+
         tfState.armedDivergence = null;
         tfState.lastLow = null;
         stateChanged = true;
@@ -370,16 +378,11 @@ const handleKlineData = async (klinePayload: KlineEvent): Promise<void> => {
           `%c[ALERTA CONFIRMADO] DIVERGÊNCIA DE BAIXA para ${eventSymbol}@${interval}! Preço rompeu ${confirmationPrice}`,
           "color: red; font-weight: bold;"
         );
+        enqueueWebhook();
+
         tfState.armedDivergence = null;
         tfState.lastHigh = null;
         stateChanged = true;
-        enqueueWebhook(
-          eventSymbol,
-          tfState.rsiValue,
-          tfState.emaValue,
-          eventTime,
-          interval
-        );
       }
     }
   }
@@ -456,11 +459,11 @@ const handleKlineData = async (klinePayload: KlineEvent): Promise<void> => {
 
   // 4. PERSISTIR O ESTADO SE HOUVE MUDANÇA
   if (stateChanged) {
-    SupabaseCoinRepository.updateIndicatorState(eventSymbol, interval, tfState)
-      .catch((e) => console.error("Falha ao salvar estado:", e))
-      .then(() =>
-        console.log(`Estado atualizado para ${eventSymbol}@${interval}`)
-      );
+    updateIndicatorQueue.enqueue({
+      eventSymbol,
+      interval,
+      tfState,
+    });
   }
 };
 
