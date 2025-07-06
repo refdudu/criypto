@@ -24,6 +24,11 @@ async function processSaveSymbolIntervalDataQueue() {
           task.newKlineData
         );
       } catch (e) {
+        enqueueSaveSymbolIntervalData(
+          task.eventSymbol,
+          task.interval,
+          task.newKlineData
+        );
         console.error("Falha ao salvar histórico:", e);
       }
       await new Promise((resolve) => setTimeout(resolve, 100));
@@ -37,7 +42,7 @@ export const enqueueSaveSymbolIntervalData = (
   interval: string,
   newKlineData: HistoricalKlineData
 ) => {
-//   console.log("Enqueueing save task:", eventSymbol, interval, newKlineData);
+  //   console.log("Enqueueing save task:", eventSymbol, interval, newKlineData);
   saveSymbolIntervalDataQueue.push({ eventSymbol, interval, newKlineData });
   processSaveSymbolIntervalDataQueue();
 };

@@ -13,13 +13,17 @@ export const webhook = async (url: string, body: object) => {
   } catch (error) {
     console.error("Error sending webhook:", error);
   }
-  
 };
 
-export const lucaWebhook = async (body: {
+export const webhookList = async (body: {
   id: string;
   rsi: number;
   ema: number;
   date: Date;
   interval: string;
-}) => webhook(process.env.LUCA_WEBHOOK_URL || "", body);
+}) => {
+  if (process.env.LUCA_WEBHOOK_URL)
+    webhook(process.env.LUCA_WEBHOOK_URL || "", body);
+
+  if (process.env.WEBHOOK_SITE) webhook(process.env.WEBHOOK_SITE || "", body);
+};

@@ -1,6 +1,6 @@
 import { CoinMap } from "./coinMap";
 import { SupabaseCoinRepository } from "./supabase/SupabaseCoinRepository";
-import { lucaWebhook } from "./webhook";
+import { webhookList } from "./webhook";
 
 const webhookQueue: Array<{
   eventSymbol: string;
@@ -73,7 +73,7 @@ const sendWebhook = async (
 
 //   console.log("Verificando se deve enviar alerta", eventSymbol, interval);
   const f = (id: string) =>
-    lucaWebhook({
+    webhookList({
       id,
       rsi,
       ema: currentEMA,

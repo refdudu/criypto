@@ -1,108 +1,108 @@
 import moment from "moment";
 import { useCoinContext } from "../contexts/CoinContext";
-import classNames from "classnames";
+// import classNames from "classnames";
 import { ArrowUpCircle, ArrowDownCircle, Clock } from "lucide-react";
 
-import { useMemo, useState, type Dispatch, type ReactNode } from "react";
 import type {
-  Coin,
-  CoinHistoric,
+  //   Coin,
+  //   CoinHistoric,
   IndicatorState,
 } from "../services/supabase/SupabaseCoinService";
-import { SelectPeriod } from "../components/SelectPeriod";
-import { AlertRSIContent } from "../components/AlertRSIContent";
-import { AllCoinsContent } from "../components/AllCoinsContent";
+// import { SelectPeriod } from "../components/SelectPeriod";
+// import { AlertRSIContent } from "../components/AlertRSIContent";
+// import { AllCoinsContent } from "../components/AllCoinsContent";
 
-type PageType = "coins" | "alerts" | "analysis";
+// type PageType = "coins" | "alerts" | "analysis";
 
 export const HomePage = () => {
-  const [type, setType] = useState<PageType>("coins");
-  const [inputText, setInputText] = useState("");
-  const { coins, rsiHistoric, setSelectedCoin, indicatorStates } =
-    useCoinContext();
+  //   const [type, setType] = useState<PageType>("coins");
+  //   const [inputText, setInputText] = useState("");
+  //   const { coins, rsiHistoric, setSelectedCoin, indicatorStates } =
+  const { indicatorStates } = useCoinContext();
 
-  const { _coins, _rsiHistoric } = useMemo(() => {
-    const _coins = coins.filter((coin) => {
-      const searchText = inputText.toLowerCase();
-      return (
-        coin.id.toLowerCase().includes(searchText) ||
-        coin.intervals.some((interval) =>
-          interval.interval.toLowerCase().includes(searchText)
-        )
-      );
-    });
-    const _rsiHistoric = rsiHistoric.filter((historic) => {
-      const searchText = inputText.toLowerCase();
-      return (
-        historic.coinId.toLowerCase().includes(searchText) ||
-        historic.interval.toLowerCase().includes(searchText)
-      );
-    });
-    return { _coins, _rsiHistoric };
-  }, [coins, rsiHistoric, inputText]);
+  //   const { _coins, _rsiHistoric } = useMemo(() => {
+  //     const _coins = coins.filter((coin) => {
+  //       const searchText = inputText.toLowerCase();
+  //       return (
+  //         coin.id.toLowerCase().includes(searchText) ||
+  //         coin.intervals.some((interval) =>
+  //           interval.interval.toLowerCase().includes(searchText)
+  //         )
+  //       );
+  //     });
+  //     const _rsiHistoric = rsiHistoric.filter((historic) => {
+  //       const searchText = inputText.toLowerCase();
+  //       return (
+  //         historic.coinId.toLowerCase().includes(searchText) ||
+  //         historic.interval.toLowerCase().includes(searchText)
+  //       );
+  //     });
+  //     return { _coins, _rsiHistoric };
+  //   }, [coins, rsiHistoric, inputText]);
 
   return (
     <div>
-      {type === "coins" && (
+      {/* {type === "coins" && (
         <AllCoinsContent coins={_coins} setSelectedCoin={setSelectedCoin} />
       )}
       {type === "alerts" && <AlertRSIContent rsiHistoric={_rsiHistoric} />}
-      {type === "analysis" && <Signals indicatorStates={indicatorStates} />}
+      {type === "analysis" && <Signals indicatorStates={indicatorStates} />} */}
+      <Signals indicatorStates={indicatorStates} />
     </div>
   );
 };
 
-interface HeaderProps {
-  type: PageType;
-  inputText: string;
-  setInputText: (value: string) => void;
-  setType: Dispatch<React.SetStateAction<PageType>>;
-}
+// interface HeaderProps {
+//   type: PageType;
+//   inputText: string;
+//   setInputText: (value: string) => void;
+//   setType: Dispatch<React.SetStateAction<PageType>>;
+// }
 
-const Header = ({ type, inputText, setInputText, setType }: HeaderProps) => {
-  const ButtonHeader = ({
-    children,
-    type: _type,
-  }: {
-    children: ReactNode;
-    type: PageType;
-  }) => (
-    <button
-      onClick={() => setType(_type)}
-      className={classNames("text-white p-2 rounded", {
-        "bg-gray-500": type === _type,
-        "bg-gray-700": type !== _type,
-      })}
-    >
-      {children}
-    </button>
-  );
+// const Header = ({ type, inputText, setInputText, setType }: HeaderProps) => {
+//   const ButtonHeader = ({
+//     children,
+//     type: _type,
+//   }: {
+//     children: ReactNode;
+//     type: PageType;
+//   }) => (
+//     <button
+//       onClick={() => setType(_type)}
+//       className={classNames("text-white p-2 rounded", {
+//         "bg-gray-500": type === _type,
+//         "bg-gray-700": type !== _type,
+//       })}
+//     >
+//       {children}
+//     </button>
+//   );
 
-  return (
-    <header className="flex items-center justify-between gap-4 h-16 px-4 bg-gray-800 c">
-      <div className="flex items-center gap-2">
-        <h2>{type === "alerts" ? "Alertas" : "Dados em tempo real"}</h2>
-        <input
-          type="text"
-          placeholder="Pesquisar..."
-          value={inputText}
-          onChange={(e) => setInputText(e.target.value)}
-          className="bg-gray-700 p-2 rounded"
-        />
-        <SelectPeriod
-          changeSelectedInterval={() => {}}
-          intervals={["5m", "15m", "30m", "1h", "4h", "1d"]}
-          selectedInterval={null}
-        />
-      </div>
-      <div className="flex items-center gap-4">
-        <ButtonHeader type="alerts">Alertas</ButtonHeader>
-        <ButtonHeader type="analysis">Análise</ButtonHeader>
-        <ButtonHeader type="coins">Tempo real</ButtonHeader>
-      </div>
-    </header>
-  );
-};
+//   return (
+//     <header className="flex items-center justify-between gap-4 h-16 px-4 bg-gray-800 c">
+//       <div className="flex items-center gap-2">
+//         <h2>{type === "alerts" ? "Alertas" : "Dados em tempo real"}</h2>
+//         <input
+//           type="text"
+//           placeholder="Pesquisar..."
+//           value={inputText}
+//           onChange={(e) => setInputText(e.target.value)}
+//           className="bg-gray-700 p-2 rounded"
+//         />
+//         <SelectPeriod
+//           changeSelectedInterval={() => {}}
+//           intervals={["5m", "15m", "30m", "1h", "4h", "1d"]}
+//           selectedInterval={null}
+//         />
+//       </div>
+//       <div className="flex items-center gap-4">
+//         <ButtonHeader type="alerts">Alertas</ButtonHeader>
+//         <ButtonHeader type="analysis">Análise</ButtonHeader>
+//         <ButtonHeader type="coins">Tempo real</ButtonHeader>
+//       </div>
+//     </header>
+//   );
+// };
 
 const Signals = ({
   indicatorStates,

@@ -30,14 +30,14 @@ export const CoinProvider = ({ children }: { children: React.ReactNode }) => {
   const [indicatorStates, setIndicatorStates] = useState<IndicatorState[]>([]);
 
   useEffect(() => {
-    const getHistoric = async () => {
-      const historicData = await SupabaseCoinService.getIntervalsAlert();
-      setRsiHistoric(historicData);
-    };
-    const getCoins = async () => {
-      const coins = await SupabaseCoinService.getCoins();
-      setCoins(coins);
-    };
+    // const getHistoric = async () => {
+    //   const historicData = await SupabaseCoinService.getIntervalsAlert();
+    //   setRsiHistoric(historicData);
+    // };
+    // const getCoins = async () => {
+    //   const coins = await SupabaseCoinService.getCoins();
+    //   setCoins(coins);
+    // };
     const getIndicatorStates = async () => {
       const states = await SupabaseCoinService.getIndicatorStates();
       setIndicatorStates(states);
