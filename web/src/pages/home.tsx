@@ -1,19 +1,25 @@
 import moment from "moment";
 import { useCoinContext } from "../contexts/CoinContext";
 import classNames from "classnames";
+import { ArrowUpCircle, ArrowDownCircle, Clock } from "lucide-react";
+
 import { useMemo, useState, type Dispatch, type ReactNode } from "react";
 import type {
   Coin,
   CoinHistoric,
+  IndicatorState,
 } from "../services/supabase/SupabaseCoinService";
 import { SelectPeriod } from "../components/SelectPeriod";
+import { AlertRSIContent } from "../components/AlertRSIContent";
+import { AllCoinsContent } from "../components/AllCoinsContent";
 
 type PageType = "coins" | "alerts" | "analysis";
 
 export const HomePage = () => {
   const [type, setType] = useState<PageType>("coins");
   const [inputText, setInputText] = useState("");
-  const { coins, rsiHistoric, setSelectedCoin } = useCoinContext();
+  const { coins, rsiHistoric, setSelectedCoin, indicatorStates } =
+    useCoinContext();
 
   const { _coins, _rsiHistoric } = useMemo(() => {
     const _coins = coins.filter((coin) => {
@@ -35,6 +41,25 @@ export const HomePage = () => {
     return { _coins, _rsiHistoric };
   }, [coins, rsiHistoric, inputText]);
 
+  return (
+    <div>
+      {type === "coins" && (
+        <AllCoinsContent coins={_coins} setSelectedCoin={setSelectedCoin} />
+      )}
+      {type === "alerts" && <AlertRSIContent rsiHistoric={_rsiHistoric} />}
+      {type === "analysis" && <Signals indicatorStates={indicatorStates} />}
+    </div>
+  );
+};
+
+interface HeaderProps {
+  type: PageType;
+  inputText: string;
+  setInputText: (value: string) => void;
+  setType: Dispatch<React.SetStateAction<PageType>>;
+}
+
+const Header = ({ type, inputText, setInputText, setType }: HeaderProps) => {
   const ButtonHeader = ({
     children,
     type: _type,
@@ -52,170 +77,118 @@ export const HomePage = () => {
       {children}
     </button>
   );
-  return (
-    <div>
-      <header className="flex items-center justify-between gap-4 h-16 px-4 bg-gray-800 c">
-        <div className="flex items-center gap-2">
-          <h2>{type === "alerts" ? "Alertas" : "Dados em tempo real"}</h2>
-          <input
-            type="text"
-            placeholder="Pesquisar..."
-            value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
-            className="bg-gray-700 p-2 rounded"
-          />
-          <SelectPeriod
-            changeSelectedInterval={() => {}}
-            intervals={["5m", "15m", "30m", "1h", "4h", "1d"]}
-            selectedInterval={null}
-          />
-        </div>
-        <div className="flex items-center gap-4">
-          <ButtonHeader type="alerts">Alertas</ButtonHeader>
-          {/* <ButtonHeader type="analysis">Análise</ButtonHeader> */}
-          <ButtonHeader type="coins">Tempo real</ButtonHeader>
-        </div>
-      </header>
-      {type === "coins" && (
-        <CoinsData coins={_coins} setSelectedCoin={setSelectedCoin} />
-      )}
-      {type === "alerts" && <RSIData rsiHistoric={_rsiHistoric} />}
-    </div>
-  );
-};
-const CoinsData = ({
-  coins,
-  setSelectedCoin,
-}: {
-  coins: Coin[];
-  setSelectedCoin: Dispatch<React.SetStateAction<Coin | null>>;
-}) => {
-  return (
-    <div className="grid h-[calc(100vh-4rem)] overflow-y-auto grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 p-4">
-      {coins.map((coin) => (
-        <button
-          type="button"
-          className={
-            "p-4 flex-1  justify-center flex flex-col hover:bg-gray-600"
-          }
-          key={coin.id}
-          onClick={() => setSelectedCoin(coin)}
-        >
-          <span className="">{coin.id}</span>
-          <span className="text-sm text-gray-300">
-            {new Intl.NumberFormat("en-US", {
-              style: "currency",
-              currency: "USD",
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2,
-              //   unitDisplay: "long",
-            }).format(coin.closePrice)}
-          </span>
-
-          {coin.intervals.map((interval) => (
-            <div
-              key={`${interval.timestamp}_${interval.interval}_${coin.id}`}
-              className={classNames(
-                {
-                  "bg-red-600": interval.rsiValue && interval.rsiValue < 35,
-                  "bg-green-600": interval.rsiValue && interval.rsiValue > 70,
-                },
-                "text-sm flex justify-between text-gray-300"
-              )}
-            >
-              <span className="w-9 font-bold">{interval.interval}</span>
-              <span className="w-9">{interval.rsiValue?.toFixed(2)}</span>
-              <span className="font-bold">
-                {moment(interval.timestamp).format("HH:mm DD/MM")}
-              </span>
-            </div>
-          ))}
-        </button>
-      ))}
-    </div>
-  );
-};
-const RSIData = ({ rsiHistoric }: { rsiHistoric: CoinHistoric[] }) => {
-  const group = useMemo(() => {
-    const group = rsiHistoric.reduce((acc, historic) => {
-      if (!historic.rsiValue) return acc;
-
-      const key = historic.rsiValue < 35 ? "buy" : "sell";
-      if (!acc[key]) {
-        acc[key] = [];
-      }
-      acc[key].push(historic);
-      return acc;
-    }, {} as Record<string, CoinHistoric[]>);
-    return group;
-  }, [rsiHistoric]);
-
-  const buyGroup = group["buy"] || [];
-  const sellGroup = group["sell"] || [];
 
   return (
-    <div className="grid grid-cols-2">
-      <GroupContainer
-        historicList={buyGroup}
-        // title={`Comprar ${buyGroup.length}`}
-      />
-      <GroupContainer
-        historicList={sellGroup}
-        // title={`Vender ${sellGroup.length}`}
-      />
-    </div>
-  );
-};
-interface GroupContainerProps {
-  historicList: CoinHistoric[];
-}
-const GroupContainer = ({ historicList }: GroupContainerProps) => {
-  return (
-    <div className="p-4 grid h-[calc(100vh-4rem)] overflow-y-auto grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-      {historicList.map((historic) => (
-        <CardRSIItem
-          key={`${historic.timestamp}_${historic.coinId}_${historic.interval}`}
-          {...{ historic }}
+    <header className="flex items-center justify-between gap-4 h-16 px-4 bg-gray-800 c">
+      <div className="flex items-center gap-2">
+        <h2>{type === "alerts" ? "Alertas" : "Dados em tempo real"}</h2>
+        <input
+          type="text"
+          placeholder="Pesquisar..."
+          value={inputText}
+          onChange={(e) => setInputText(e.target.value)}
+          className="bg-gray-700 p-2 rounded"
         />
-      ))}
-    </div>
+        <SelectPeriod
+          changeSelectedInterval={() => {}}
+          intervals={["5m", "15m", "30m", "1h", "4h", "1d"]}
+          selectedInterval={null}
+        />
+      </div>
+      <div className="flex items-center gap-4">
+        <ButtonHeader type="alerts">Alertas</ButtonHeader>
+        <ButtonHeader type="analysis">Análise</ButtonHeader>
+        <ButtonHeader type="coins">Tempo real</ButtonHeader>
+      </div>
+    </header>
   );
 };
 
-interface RSIHistoricItemProps {
-  historic: CoinHistoric;
-}
-const CardRSIItem = ({ historic }: RSIHistoricItemProps) => {
-  const isHigh = historic.emaValue && historic.closePrice > historic.emaValue;
+const Signals = ({
+  indicatorStates,
+}: {
+  indicatorStates: IndicatorState[];
+}) => {
+  // Separar sinais armados dos demais
+  const armed = indicatorStates.filter(
+    (s) => s.armed_divergence_type && s.armed_at_timestamp
+  );
+  const others = indicatorStates.filter(
+    (s) => !s.armed_divergence_type && !s.armed_at_timestamp
+  );
+
   return (
-    <div
-      className={classNames("p-4 flex-1  justify-center flex flex-col", {
-        "bg-red-600": historic.rsiValue && historic.rsiValue < 35,
-        "bg-green-600": historic.rsiValue && historic.rsiValue > 70,
-      })}
-    >
-      <div>
-        <span className="">
-          {historic.coinId} {isHigh ? "🔼" : "🔽"}
-        </span>
+    <div className="p-4">
+      <h2 className="text-lg font-bold mb-2">Sinais Armados</h2>
+      {armed.length === 0 && (
+        <div className="text-gray-400 mb-4">
+          Nenhum sinal armado no momento.
+        </div>
+      )}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mb-8">
+        {armed.map((state) => (
+          <div
+            key={state.symbol + state.interval + state.updated_at}
+            className={`flex flex-col p-4 rounded shadow bg-gray-800 border-l-4 ${
+              state.armed_divergence_type === "BULLISH"
+                ? "border-green-500"
+                : "border-red-500"
+            }`}
+          >
+            <div className="flex items-center gap-2 mb-2">
+              <span className="font-semibold text-white text-lg">
+                {state.symbol} - {state.interval}
+              </span>
+              {state.armed_divergence_type === "BULLISH" ? (
+                <ArrowUpCircle className="text-green-400" size={22} />
+              ) : (
+                <ArrowDownCircle className="text-red-400" size={22} />
+              )}
+              <Clock className="text-gray-400 ml-2" size={18} />
+            </div>
+            <span className="text-gray-300 mb-1">
+              RSI topo: <b>{state.last_high_rsi ?? "N/A"}</b> | RSI fundo:{" "}
+              <b>{state.last_low_rsi ?? "N/A"}</b>
+            </span>
+            <span className="text-gray-300 mb-1">
+              Preço de confirmação:{" "}
+              <b>{state.armed_confirmation_price ?? "N/A"}</b>
+            </span>
+            <span className="text-gray-400 text-sm mb-1">
+              Armado em:{" "}
+              {state.armed_at_timestamp
+                ? moment(state.armed_at_timestamp).format("DD/MM/YYYY HH:mm")
+                : "N/A"}
+            </span>
+            <span className="text-gray-500 text-xs mt-1">
+              Divergência armada:{" "}
+              {state.armed_divergence_type === "BULLISH" ? "Alta" : "Baixa"}
+            </span>
+          </div>
+        ))}
       </div>
 
-      <span className="text-sm text-gray-300">
-        Ema: <b>{historic.emaValue?.toFixed(5)}</b>
-      </span>
-      <span className="text-sm text-gray-300">
-        Valor: <b>{historic.closePrice.toFixed(5)}</b>
-      </span>
-      <span className="text-sm text-gray-300">
-        Intervalo: <b>{historic.interval}</b>
-      </span>
-
-      <span className="text-sm text-gray-300">
-        RSI: <b>{historic.rsiValue?.toFixed(2)}</b>
-      </span>
-      <span className="text-sm text-gray-300">
-        Date: <b>{moment(historic.timestamp).format("HH:mm MM/DD/YY")}</b>
-      </span>
+      <h2 className="text-lg font-bold mb-2">Outros Sinais</h2>
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+        {others.map((state) => (
+          <div
+            key={state.symbol + state.interval + state.updated_at}
+            className="flex flex-col p-4 rounded shadow bg-gray-700"
+          >
+            <span className="font-semibold text-white">
+              {state.symbol} - {state.interval}
+            </span>
+            <span className="text-gray-300">
+              RSI topo: <b>{state.last_high_rsi ?? "N/A"}</b> | RSI fundo:{" "}
+              <b>{state.last_low_rsi ?? "N/A"}</b>
+            </span>
+            <span className="text-gray-400 text-sm">
+              Última atualização:{" "}
+              {moment(state.updated_at).format("DD/MM/YYYY HH:mm")}
+            </span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 };

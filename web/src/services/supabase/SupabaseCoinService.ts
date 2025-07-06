@@ -77,6 +77,21 @@ const getCoinLastInterval = async (): Promise<CoinHistoric[]> => {
   });
 };
 
+const getIndicatorStates = async (): Promise<IndicatorState[]> => {
+    const { data, error } = await supabase
+        .from("indicator_states")
+        .select("*")
+        .neq("interval", "5m")
+        // .not("armed_at_timestamp", "is", null)
+        .order("armed_at_timestamp", { ascending: false });
+
+    if (error) {
+        console.error("Error fetching interval alerts:", error);
+        return [];
+    }
+
+    return data;
+};
 const getIntervalsAlert = async (): Promise<CoinHistoric[]> => {
   const { data, error } = await supabase
     .from("market_data")
@@ -166,4 +181,5 @@ export const SupabaseCoinService = {
   getCoinLastInterval,
   getIntervalsAlert,
   watchIntervals,
+  getIndicatorStates
 };

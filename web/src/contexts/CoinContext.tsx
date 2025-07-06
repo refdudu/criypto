@@ -9,6 +9,7 @@ import {
   SupabaseCoinService,
   type Coin,
   type CoinHistoric,
+  type IndicatorState,
 } from "../services/supabase/SupabaseCoinService";
 import { DrawerCoinChart } from "../components/CoinChart";
 // import { DrawerCoinChart } from "../components/CoinChart";
@@ -18,6 +19,7 @@ const CoinContext = createContext(
     coins: Coin[];
     rsiHistoric: CoinHistoric[];
     setSelectedCoin: Dispatch<React.SetStateAction<Coin | null>>;
+    indicatorStates: IndicatorState[];
   }
 );
 
@@ -25,7 +27,7 @@ export const CoinProvider = ({ children }: { children: React.ReactNode }) => {
   const [coins, setCoins] = useState<Coin[]>([]);
   const [rsiHistoric, setRsiHistoric] = useState<CoinHistoric[]>([]);
   const [selectedCoin, setSelectedCoin] = useState<Coin | null>(null);
-  //   const [selectedCoin, setSelectedCoin] = useState("");
+  const [indicatorStates, setIndicatorStates] = useState<IndicatorState[]>([]);
 
   useEffect(() => {
     const getHistoric = async () => {
@@ -36,9 +38,14 @@ export const CoinProvider = ({ children }: { children: React.ReactNode }) => {
       const coins = await SupabaseCoinService.getCoins();
       setCoins(coins);
     };
+    const getIndicatorStates = async () => {
+      const states = await SupabaseCoinService.getIndicatorStates();
+      setIndicatorStates(states);
+    };
 
-    getCoins();
-    getHistoric();
+    getIndicatorStates().catch(console.error);
+    // getCoins().catch(console.error);
+    // getHistoric().catch(console.error);
 
     const rsiAlertChannel = SupabaseCoinService.watchIntervals(
       setRsiHistoric,
@@ -53,7 +60,9 @@ export const CoinProvider = ({ children }: { children: React.ReactNode }) => {
   }, []);
 
   return (
-    <CoinContext.Provider value={{ rsiHistoric, coins, setSelectedCoin }}>
+    <CoinContext.Provider
+      value={{ rsiHistoric, coins, setSelectedCoin, indicatorStates }}
+    >
       <DrawerCoinChart
         selectedCoin={selectedCoin}
         onClose={() => setSelectedCoin(null)}
