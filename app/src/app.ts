@@ -5,12 +5,14 @@ import {
   HistoricalKlineData,
   KlineEvent,
 } from "./interfaces";
+
 import "dotenv/config";
+
 import {
   DataSymbolsState,
   SupabaseCoinRepository,
 } from "./supabase/SupabaseCoinRepository";
-import { enqueueSaveSymbolIntervalData } from "./saveSymbolIntervalDataQueue";
+
 import { saveKlineQueue } from "./queues/saveKlineQueue";
 import { webhookQueue } from "./queues/WebhookQueue";
 import { updateIndicatorQueue } from "./queues/updateIndicatorQueue";
