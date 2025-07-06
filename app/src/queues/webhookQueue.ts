@@ -52,4 +52,4 @@ const sendWebhook = async ({
     await f(id);
   }
 };
-export const webhookQueue = new QueueManager(sendWebhook, 100);
+export const webhookQueue = new QueueManager(sendWebhook, 1000);
