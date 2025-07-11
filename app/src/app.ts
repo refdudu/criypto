@@ -335,6 +335,18 @@ const handleKlineData = async (klinePayload: KlineEvent): Promise<void> => {
     newKlineData.rsiValue = rsi;
   }
 
+
+  // validar se o rsi da ultima hora era menor que 30 tmb
+  if (interval === "1h" && tfState.rsiValue && tfState.rsiValue < 30) {
+    webhookQueue.enqueue({
+      eventSymbol,
+      rsi: tfState.rsiValue,
+      ema: tfState.emaValue,
+      date: eventTime,
+      interval,
+    });
+  }
+
   saveKlineQueue.enqueue({ eventSymbol, interval, newKlineData });
   if (!tfState.rsiValue) return; // Precisa de RSI para continuar
 
@@ -370,7 +382,7 @@ const handleKlineData = async (klinePayload: KlineEvent): Promise<void> => {
           "color: green; font-weight: bold;"
         );
 
-        enqueueWebhook();
+        // enqueueWebhook();
 
         tfState.armedDivergence = null;
         tfState.lastLow = null;
@@ -380,7 +392,7 @@ const handleKlineData = async (klinePayload: KlineEvent): Promise<void> => {
           `%c[ALERTA CONFIRMADO] DIVERGÊNCIA DE BAIXA para ${eventSymbol}@${interval}! Preço rompeu ${confirmationPrice}`,
           "color: red; font-weight: bold;"
         );
-        enqueueWebhook();
+        // enqueueWebhook();
 
         tfState.armedDivergence = null;
         tfState.lastHigh = null;
