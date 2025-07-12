@@ -334,10 +334,24 @@ const handleKlineData = async (klinePayload: KlineEvent): Promise<void> => {
     tfState.rsiValue = rsi;
     newKlineData.rsiValue = rsi;
   }
+  const sendLucaWebhook = async () => {
+    if (interval !== "1h" || !tfState.rsiValue || tfState.rsiValue > 30) return;
 
+    const historicData = await SupabaseCoinRepository.getCoinHistoric(
+      eventSymbol,
+      interval
+    );
+    const hasIntervals = historicData.length === 4;
+    if (!hasIntervals) return;
 
-  // validar se o rsi da ultima hora era menor que 30 tmb
-  if (interval === "1h" && tfState.rsiValue && tfState.rsiValue < 30) {
+    // const last4 = [...historicData.slice(4)];
+    if (historicData.every((data) => (data?.rsi_value || 0) < 30)) return;
+    
+
+    
+    // const lastRsi = historicData[historicData.length - 1].rsi_value;
+    // if (!lastRsi || lastRsi < 30) return;
+
     webhookQueue.enqueue({
       eventSymbol,
       rsi: tfState.rsiValue,
@@ -345,7 +359,8 @@ const handleKlineData = async (klinePayload: KlineEvent): Promise<void> => {
       date: eventTime,
       interval,
     });
-  }
+  };
+  // validar se o rsi da ultima hora era menor que 30 tmb
 
   saveKlineQueue.enqueue({ eventSymbol, interval, newKlineData });
   if (!tfState.rsiValue) return; // Precisa de RSI para continuar

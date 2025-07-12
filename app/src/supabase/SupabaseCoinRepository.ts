@@ -145,6 +145,26 @@ async function loadInitialStateForAllSymbols(
   return groupedState;
 }
 
+const getCoinHistoric = async (symbol: string, interval: string) => {
+  const { data, error } = await supabase
+    .from("market_data")
+    .select("rsi_value")
+    .eq("symbol", symbol)
+    .eq("interval", interval)
+    .order("timestamp", { ascending: false })
+    .limit(4);
+
+  if (error) {
+    console.error(
+      `Erro ao carregar histórico de ${symbol}@${interval}:`,
+      error
+    );
+    throw error;
+  }
+
+  return data as CoinHistoricSupabase[];
+};
+
 async function getLastCoinHistoric(
   symbol: string,
   interval: string
@@ -357,4 +377,5 @@ export const SupabaseCoinRepository = {
   getLastCoinHistoric,
   checkRecentRsiAlerts,
   updateIndicatorState,
+  getCoinHistoric,
 };
