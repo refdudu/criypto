@@ -1,14 +1,17 @@
 import { useState } from "react";
 import { AlertRSIContent } from "../components/AlertRSIContent";
 import { AllCoinsContent } from "../components/AllCoinsContent";
-import { useCoinContext } from "../contexts/CoinContext";
+import { useCoinContext } from "../contexts/useCoinContext";
 import type { IndicatorState } from "../services/supabase/SupabaseCoinService";
 
 type Tab = "signals" | "coins" | "alerts";
 const when = (value: string | null) => value ? new Date(value).toLocaleString("pt-BR") : "—";
 function Signals({ rows }: { rows: IndicatorState[] }) {
-  const armed = rows.filter(row => row.armed_divergence_type != null && row.armed_at_timestamp != null);
-  const others = rows.filter(row => !row.armed_divergence_type || !row.armed_at_timestamp);
+  const age=(interval:string)=>({"5m":900000,"15m":2700000,"1h":10800000} as Record<string,number>)[interval]??3600000;
+  const stale=rows.filter(r=>!Number.isFinite(Date.parse(r.updated_at))||Date.now()-Date.parse(r.updated_at)>age(r.interval));
+  const recent=rows.filter(r=>!stale.includes(r));
+  const armed=recent.filter(r=>r.armed_divergence_type!=null&&r.armed_at_timestamp!=null);
+  const others=recent.filter(r=>!r.armed_divergence_type||!r.armed_at_timestamp);
   const render = (items: IndicatorState[]) => (
     <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 mb-8">
       {items.map(row => (
@@ -30,6 +33,7 @@ function Signals({ rows }: { rows: IndicatorState[] }) {
     {armed.length ? render(armed) : <p className="text-gray-400 mb-8">Nenhum sinal armado.</p>}
     <h2 className="text-lg font-semibold mb-3">Outros indicadores ({others.length})</h2>
     {render(others)}
+    {stale.length>0&&<p className="text-sm text-gray-400">Registros antigos ocultados: {stale.length}. Não são sinais atuais.</p>}
   </>;
 }
 export function HomePage() {

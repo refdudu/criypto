@@ -1,26 +1,26 @@
-# Criypto
+# Criypto v3
 
-Monitor de mercado **sem execução de ordens**. Obtém candles fechados da Binance; calcula RSI(14) de Wilder, EMA(21), ATR(14) e RVOL(20); identifica divergências entre dois pivôs confirmados (2 candles à esquerda e 2 à direita); confirma pela quebra da estrutura no fechamento. Indicadores e estratégia são reconstruídos a partir de até 200 candles em ordem cronológica. O RSI no caso 0/0 é, por convenção, 50. Os parâmetros de estratégia são hipóteses e não representam probabilidade de lucro.
+Monitor de divergências baseado em candles fechados da Binance. **Não executa ordens nem afirma probabilidades de lucro.**
 
-## Serviços
+## Instalação segura
 
-- `app/`: backend Node.js, Express e Binance WebSocket. Seleciona no início até 20 mercados USDT por volume de 24h (mínimo de 1 milhão de USDT). Fallback: BTCUSDT, ETHUSDT. Intervalos: 5m, 15m e 1h.
-- `web/`: dashboard React. Consulta Supabase diretamente; atualiza pelos eventos Realtime e possui polling a cada 60 s como fallback.
-- `app/src/backtest.ts`: ferramenta pura para replay de estratégia. Usa entrada na abertura da vela seguinte, custos configuráveis e hipótese conservadora quando alvo e stop ocorrem na mesma vela. **Não existe estatística de acerto validada para este projeto.**
+1. **Antes de implantar o novo backend**, execute `app/migrations/001_market_engine_v3.sql` no SQL Editor do projeto Supabase correto e revise o resultado. A migração não apaga dados e aborta se existirem candles duplicados para `symbol,interval,timestamp`. Não foi executada automaticamente pelo commit.
+2. Backend: configurar `app/.env` com `SUPABASE_CLIENT_ID` (URL) e `SUPABASE_CLIENT_SECRET` (**chave backend com permissão service_role**, nunca exposta no navegador). Opcionalmente: `BINANCE_API_KEY`, `BINANCE_API_SECRET`, `API_PORT`, `DYNAMIC_SYMBOLS=false`, `BINANCE_REST_URL`, `LUCA_WEBHOOK_URL` e `WEBHOOK_SITE`.
+3. Frontend: configurar `VITE_SUPABASE_CLIENT_ID` e `VITE_SUPABASE_CLIENT_SECRET`. Esta última deve conter exclusivamente uma chave **publishable/anon**, pois `VITE_*` é pública. Habilitar RLS de leitura somente para as tabelas necessárias. Nunca usar uma chave de backend no browser.
+4. Em `app/`: `npm install && npm test && npm run build && npm start`. Em `web/`: `npm install && npm run lint && npm run build`. Docker Compose: `app/docker-compose.yml`.
 
-## Preparação
+## Implementação
 
-Configure `app/.env` com `SUPABASE_CLIENT_ID` (URL), `SUPABASE_CLIENT_SECRET` (chave com permissões de backend), e opcionalmente `BINANCE_API_KEY`, `BINANCE_API_SECRET`, `API_PORT`, `DYNAMIC_SYMBOLS=false`, `LUCA_WEBHOOK_URL`, `WEBHOOK_SITE`, `BINANCE_REST_URL`. Não registre nem publique chaves privadas. O backend lê candles públicos por REST na inicialização e recupera lacunas durante reconexões.
+- RSI14 Wilder, EMA21, ATR14 e RVOL20 possuem estado **incremental**. Uma janela de 200 candles não reinicia a suavização. A inicialização carrega até 1000 candles, recupera o estado numérico persistido quando o candle-âncora existe e reconcilia os mais recentes.
+- Eventos fechados `x=true`; repetidos ou fora de ordem não alteram estado. Lacunas pequenas são buscadas por REST; lacunas maiores provocam nova inicialização. Série inicial descontínua ou obsoleta é rejeitada.
+- Pivôs confirmados (2 velas antes/depois), divergências regulares e confirmação somente por fechamento. Parâmetros em `strategy.ts` são hipóteses, não filtros comprovadamente rentáveis.
+- `persist_market_batch` realiza em uma transação SQL a escrita de candles, resumo, indicador incremental e evento de confirmação. A tabela `signal_events` é um **outbox durável**. Cada destino tem marcação de entrega independente. Um destinatário deve deduplicar `eventId` após falhas entre HTTP e confirmação no banco. Execute **apenas uma instância do dispatcher** por projeto até implementar claim transacional multiworker.
+- O payload usa `id` e `symbol` com o **par Binance**, sem atribuir IDs externos não verificados.
+- A seleção inicial monitora até 20 mercados USDT mais líquidos (volume 24h mínimo de 1 milhão). Ela **não é** uma seleção de top gainers. Intervalos: 5m, 15m e 1h; alertas confirmados em 15m e 1h.
+- O dashboard esconde estados obsoletos, apresenta RSI por intervalo, diferencia sobrecompra/sobrevenda e atualiza por Realtime com fallback de 60 s.
 
-Configure `web/.env` com `VITE_SUPABASE_CLIENT_ID` e `VITE_SUPABASE_CLIENT_SECRET`. **A segunda variável deve conter exclusivamente a chave publishable/anon, nunca service_role ou secret key**: valores `VITE_` são visíveis ao navegador. Habilite RLS com apenas a leitura pública necessária em `symbols`, `market_data` e `indicator_states`. A configuração real das políticas e publicações do Supabase não está versionada neste repositório; confira antes de publicar.
+## Backtest e limitações
 
-O banco existente deve conter `market_data` (`symbol`, `interval`, `timestamp`, `open_price`, `high_price`, `low_price`, `close_price`, `ema_value`, `rsi_value`), `symbols` (campos `last_*`, conflito em `symbol`) e `indicator_states` (conflito em `symbol,interval`, campos de pivô, divergência e `updated_at`). Não há migração destrutiva automática.
+O backtest é puro, usa a mesma série incremental de indicadores e a mesma estratégia do monitor. Entrada na abertura seguinte, custos configuráveis, stop conservador quando alvo e stop ocorrem no mesmo candle, preenchimento pelo preço de abertura em gaps e ausência de operações simultâneas por símbolo. Sinais de baixa são **simulações hipotéticas** e não implicam venda a descoberto disponível no mercado spot.
 
-Instale dependências em cada pasta com `npm install`. No backend use `npm test`, `npm run build`, `npm start`. No frontend use `npm run lint` e `npm run build`. Docker Compose está em `app/docker-compose.yml`.
-
-## Garantias e limitações
-
-- Somente candles com `x=true` são processados. Duplicatas e eventos fora de ordem são ignorados; pequenas lacunas são recuperadas via REST. A recuperação de lacunas não dispara webhooks históricos.
-- O estado estratégico é reconstruído por replay de 200 candles. Os primeiros candles funcionam como warm-up; mercados com dados insuficientes são ignorados. Inicialização e replay usam a mesma janela, não estados suavizados inconsistentes armazenados separadamente.
-- Sinais confirmados em 15m e 1h podem emitir webhook. `eventId` identifica o evento, mas **a entrega é tentativa limitada**, em fila volátil. Destinatários devem tolerar duplicatas e configurar deduplicação. Falhas definitivas são registradas nos logs. Não há fila durável nem execução financeira.
-- ATR e RVOL são métricas de contexto; nenhuma pontuação é tratada como chance de acerto. Seleção de símbolos é feita na inicialização, não continuamente. A estratégia ainda requer backtesting fora da amostra, avaliação de custos, risco e calibração antes de uso financeiro real.
+**Pendente fora do GitHub:** aplicar/verificar a migração no banco real, auditar permissões RLS/credenciais, executar integração ao vivo e validar a performance da estratégia com histórico representativo fora da amostra. A migração é um pré-requisito de implantação do backend v3. Não há modelo probabilístico calibrado, estratégia 4h ou negociação automática. A disponibilidade de versões idênticas de dependências requer commitar lockfiles gerados por gerenciador de pacotes autorizado.

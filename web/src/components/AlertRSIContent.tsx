@@ -1,88 +1,26 @@
-import classNames from "classnames";
-import moment from "moment";
 import { useMemo } from "react";
 import type { CoinHistoric } from "../services/supabase/SupabaseCoinService";
-
-export const AlertRSIContent = ({ rsiHistoric }: { rsiHistoric: CoinHistoric[] }) => {
-  const group = useMemo(() => {
-    const group = rsiHistoric.reduce((acc, historic) => {
-      if (!historic.rsiValue) return acc;
-
-      const key = historic.rsiValue < 35 ? "buy" : "sell";
-      if (!acc[key]) {
-        acc[key] = [];
-      }
-      acc[key].push(historic);
-      return acc;
-    }, {} as Record<string, CoinHistoric[]>);
-    return group;
-  }, [rsiHistoric]);
-
-  const buyGroup = group["buy"] || [];
-  const sellGroup = group["sell"] || [];
-
-  return (
-    <div className="grid grid-cols-2">
-      <GroupContainer
-        historicList={buyGroup}
-        // title={`Comprar ${buyGroup.length}`}
-      />
-      <GroupContainer
-        historicList={sellGroup}
-        // title={`Vender ${sellGroup.length}`}
-      />
-    </div>
-  );
+export const AlertRSIContent=({rsiHistoric}:{rsiHistoric:CoinHistoric[]})=>{
+  const {low,high}=useMemo(()=>({
+    low:rsiHistoric.filter(x=>x.rsiValue!=null&&x.rsiValue<30),
+    high:rsiHistoric.filter(x=>x.rsiValue!=null&&x.rsiValue>70)
+  }),[rsiHistoric]);
+  return <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+    <Group title={`Sobrevenda (RSI < 30) · ${low.length}`} values={low} color="border-red-500"/>
+    <Group title={`Sobrecompra (RSI > 70) · ${high.length}`} values={high} color="border-green-500"/>
+  </div>;
 };
-interface GroupContainerProps {
-  historicList: CoinHistoric[];
+function Group({title,values,color}:{title:string;values:CoinHistoric[];color:string}){
+  return <section><h2 className="font-semibold mb-3">{title}</h2>
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      {values.map(x=><article key={`${x.timestamp}_${x.coinId}_${x.interval}`}
+        className={`rounded border-l-4 ${color} bg-gray-800 p-3`}>
+        <strong>{x.coinId} · {x.interval}</strong>
+        <p>RSI: {x.rsiValue?.toFixed(2)} · EMA: {x.emaValue?.toFixed(5)??"—"}</p>
+        <p className="text-sm text-gray-300">Fechamento: {x.closePrice}</p>
+        <time className="text-xs text-gray-400">{new Date(x.timestamp).toLocaleString("pt-BR")}</time>
+      </article>)}
+    </div>
+    {!values.length&&<p className="text-gray-400">Nenhum registro.</p>}
+  </section>;
 }
-const GroupContainer = ({ historicList }: GroupContainerProps) => {
-  return (
-    <div className="p-4 grid h-[calc(100vh-4rem)] overflow-y-auto grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-      {historicList.map((historic) => (
-        <CardRSIItem
-          key={`${historic.timestamp}_${historic.coinId}_${historic.interval}`}
-          {...{ historic }}
-        />
-      ))}
-    </div>
-  );
-};
-interface RSIHistoricItemProps {
-  historic: CoinHistoric;
-}
-const CardRSIItem = ({ historic }: RSIHistoricItemProps) => {
-  const isHigh = historic.emaValue && historic.closePrice > historic.emaValue;
-  return (
-    <div
-      className={classNames("p-4 flex-1  justify-center flex flex-col", {
-        "bg-red-600": historic.rsiValue && historic.rsiValue < 35,
-        "bg-green-600": historic.rsiValue && historic.rsiValue > 70,
-      })}
-    >
-      <div>
-        <span className="">
-          {historic.coinId} {isHigh ? "🔼" : "🔽"}
-        </span>
-      </div>
-
-      <span className="text-sm text-gray-300">
-        Ema: <b>{historic.emaValue?.toFixed(5)}</b>
-      </span>
-      <span className="text-sm text-gray-300">
-        Valor: <b>{historic.closePrice.toFixed(5)}</b>
-      </span>
-      <span className="text-sm text-gray-300">
-        Intervalo: <b>{historic.interval}</b>
-      </span>
-
-      <span className="text-sm text-gray-300">
-        RSI: <b>{historic.rsiValue?.toFixed(2)}</b>
-      </span>
-      <span className="text-sm text-gray-300">
-        Date: <b>{moment(historic.timestamp).format("HH:mm MM/DD/YY")}</b>
-      </span>
-    </div>
-  );
-};

@@ -1,7 +1,6 @@
 .env
+.env.*
+!.env.example
 node_modules
-# web
-.env.development
-yarn.lock
 dist
-package-lock.json
+.DS_Store

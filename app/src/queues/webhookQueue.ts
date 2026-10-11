@@ -1,19 +1,33 @@
-import { CoinMap } from "../coinMap";
-import { QueueManager } from "./QueueManager";
-import { webhookList } from "../webhook";
-interface Task {
-  eventSymbol: string; interval: string; date: number; direction: "BULLISH" | "BEARISH";
-  confirmationPrice: number; rsi: number | null; ema: number | null;
-  atr: number | null; relativeVolume: number | null;
+import { SupabaseCoinRepository } from "../supabase/SupabaseCoinRepository";
+import { configuredWebhookTargets, sendWebhook } from "../webhook";
+/** Durable DB outbox. One active worker per backend deployment; receivers should dedupe payload.eventId. */
+let running=false;
+export async function dispatchPendingSignals():Promise<void>{
+  if(running)return;
+  running=true;
+  try{
+    const targets=configuredWebhookTargets();
+    if(!targets.length)return; // Keep events pending until destinations are configured.
+    const events=await SupabaseCoinRepository.getPendingSignals();
+    for(const event of events){
+      const delivered=new Set(event.delivered_targets);
+      for(const target of targets){
+        if(delivered.has(target.key))continue;
+        try{
+          await sendWebhook(target.url,event.payload);
+          delivered.add(target.key);
+          // Commit each target independently: retry only destinations not yet marked delivered.
+          await SupabaseCoinRepository.markDelivery(event.event_id,[...delivered],
+            targets.every(t=>delivered.has(t.key)));
+        }catch(error){
+          console.error(`Delivery failure ${event.event_id}/${target.key}`,error);
+        }
+      }
+      if(targets.every(t=>delivered.has(t.key)) &&
+        event.delivered_targets.length===targets.length) {
+        // A legacy event might have been delivered already; ensure it leaves the pending queue.
+        await SupabaseCoinRepository.markDelivery(event.event_id,[...delivered],true);
+      }
+    }
+  }finally{running=false;}
 }
-export const webhookQueue = new QueueManager<Task>(async event => {
-  await webhookList({
-    id: CoinMap[event.eventSymbol] ?? event.eventSymbol.toLowerCase(),
-    symbol: event.eventSymbol, type: "DIVERGENCE_CONFIRMED",
-    direction: event.direction, confirmationPrice: event.confirmationPrice,
-    rsi: event.rsi, ema: event.ema, atr: event.atr,
-    relativeVolume: event.relativeVolume, date: new Date(event.date).toISOString(),
-    interval: event.interval,
-    eventId: `${event.eventSymbol}:${event.interval}:${event.direction}:${event.date}`
-  });
-}, 1000);
