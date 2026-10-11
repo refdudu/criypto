@@ -1,83 +1,46 @@
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useState,
-  type Dispatch,
-} from "react";
-import {
-  SupabaseCoinService,
-  type Coin,
-  type CoinHistoric,
-  type IndicatorState,
-} from "../services/supabase/SupabaseCoinService";
+import { createContext, useContext, useEffect, useState, type Dispatch, type SetStateAction } from "react";
+import { SupabaseCoinService, type Coin, type CoinHistoric, type IndicatorState } from "../services/supabase/SupabaseCoinService";
 import { DrawerCoinChart } from "../components/CoinChart";
-// import { DrawerCoinChart } from "../components/CoinChart";
 
-const CoinContext = createContext(
-  {} as {
-    coins: Coin[];
-    rsiHistoric: CoinHistoric[];
-    setSelectedCoin: Dispatch<React.SetStateAction<Coin | null>>;
-    indicatorStates: IndicatorState[];
-  }
-);
-
-export const CoinProvider = ({ children }: { children: React.ReactNode }) => {
+interface Value {
+  coins: Coin[]; rsiHistoric: CoinHistoric[];
+  setSelectedCoin: Dispatch<SetStateAction<Coin | null>>;
+  indicatorStates: IndicatorState[]; error: string | null; loading: boolean;
+  refresh: () => void;
+}
+const CoinContext = createContext<Value | null>(null);
+export function CoinProvider({ children }: { children: React.ReactNode }) {
   const [coins, setCoins] = useState<Coin[]>([]);
   const [rsiHistoric, setRsiHistoric] = useState<CoinHistoric[]>([]);
   const [selectedCoin, setSelectedCoin] = useState<Coin | null>(null);
   const [indicatorStates, setIndicatorStates] = useState<IndicatorState[]>([]);
-
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const refresh = () => {
+    void Promise.all([
+      SupabaseCoinService.getCoins(), SupabaseCoinService.getIntervalsAlert(),
+      SupabaseCoinService.getIndicatorStates()
+    ]).then(([nextCoins, alerts, states]) => {
+      setCoins(nextCoins); setRsiHistoric(alerts); setIndicatorStates(states); setError(null);
+    }).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : String(reason)))
+      .finally(() => setLoading(false));
+  };
   useEffect(() => {
-    // const getHistoric = async () => {
-    //   const historicData = await SupabaseCoinService.getIntervalsAlert();
-    //   setRsiHistoric(historicData);
-    // };
-    // const getCoins = async () => {
-    //   const coins = await SupabaseCoinService.getCoins();
-    //   setCoins(coins);
-    // };
-    const getIndicatorStates = async () => {
-      const states = await SupabaseCoinService.getIndicatorStates();
-      setIndicatorStates(states);
-    };
-
-    getIndicatorStates().catch(console.error);
-    // getCoins().catch(console.error);
-    // getHistoric().catch(console.error);
-
-    const rsiAlertChannel = SupabaseCoinService.watchIntervals(
-      setRsiHistoric,
-      setCoins
-    );
-
-    return () => {
-      setRsiHistoric([]);
-      setCoins([]);
-      if (rsiAlertChannel) rsiAlertChannel.unsubscribe();
-    };
+    refresh();
+    const channel = SupabaseCoinService.watch(refresh);
+    // Polling fallback also covers deployments without Supabase Realtime publication.
+    const timer = setInterval(refresh, 60_000);
+    return () => { clearInterval(timer); void channel.unsubscribe(); };
   }, []);
-
   return (
-    <CoinContext.Provider
-      value={{ rsiHistoric, coins, setSelectedCoin, indicatorStates }}
-    >
-      <DrawerCoinChart
-        selectedCoin={selectedCoin}
-        onClose={() => setSelectedCoin(null)}
-      />
-      <div className="bg-gray-900 text-base text-white relative">
-        {children}
-      </div>
+    <CoinContext.Provider value={{ coins, rsiHistoric, setSelectedCoin, indicatorStates, error, loading, refresh }}>
+      <DrawerCoinChart selectedCoin={selectedCoin} onClose={() => setSelectedCoin(null)} />
+      <div className="bg-gray-900 min-h-screen text-base text-white relative">{children}</div>
     </CoinContext.Provider>
   );
-};
-
-export const useCoinContext = () => {
-  const context = useContext(CoinContext);
-  if (!context) {
-    throw new Error("useCoinContext must be used within a CoinProvider");
-  }
-  return context;
-};
+}
+export function useCoinContext() {
+  const value = useContext(CoinContext);
+  if (!value) throw new Error("useCoinContext must be used within CoinProvider");
+  return value;
+}

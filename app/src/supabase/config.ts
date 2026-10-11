@@ -1,11 +1,6 @@
-// src/supabase.ts
+import "dotenv/config";
 import { createClient } from "@supabase/supabase-js";
-
-// Replace with your actual Supabase URL and anon key
-// It's recommended to use environment variables for these
-const supabaseUrl = process.env.SUPABASE_CLIENT_ID || "";
-const supabaseAnonKey = process.env.SUPABASE_CLIENT_SECRET || "";
-console.log("🚀 ~ supabaseAnonKey:", supabaseAnonKey)
-
-// Create and export the Supabase client
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+const url = process.env.SUPABASE_CLIENT_ID;
+const key = process.env.SUPABASE_CLIENT_SECRET;
+if (!url || !key) throw new Error("Missing Supabase configuration");
+export const supabase = createClient(url, key);

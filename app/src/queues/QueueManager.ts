@@ -1,37 +1,36 @@
-// src/queue/QueueManager.ts
-type QueueTask<T> = T;
 type QueueProcessor<T> = (task: T) => Promise<void>;
-
+interface Queued<T> { task: T; attempts: number }
+/** Bounded retries prevent one permanent failure from blocking subsequent tasks. In-memory queue. */
 export class QueueManager<T> {
-  private queue: QueueTask<T>[] = [];
+  private queue: Queued<T>[] = [];
   private isProcessing = false;
-  private processor: QueueProcessor<T>;
-  private time: number;
-
-  constructor(processor: QueueProcessor<T>, time: number = 100) {
-    this.processor = processor;
-    this.time = time;
+  constructor(private processor: QueueProcessor<T>, private delayMs = 100, private maxAttempts = 5) {}
+  enqueue(task: T) {
+    this.queue.push({ task, attempts: 0 });
+    void this.process();
   }
-
-  enqueue(task: QueueTask<T>) {
-    this.queue.push(task);
-    this.process();
-  }
-
   private async process() {
     if (this.isProcessing) return;
     this.isProcessing = true;
-    while (this.queue.length > 0) {
-      const task = this.queue.shift()!;
-      try {
-        await this.processor(task);
-      } catch (e) {
-        console.error("Erro ao processar tarefa da fila:", e);
-        this.queue.push(task); // re-enfileira para tentar novamente
-        await new Promise((r) => setTimeout(r, 500));
+    try {
+      while (this.queue.length) {
+        const item = this.queue.shift()!;
+        try {
+          await this.processor(item.task);
+        } catch (error) {
+          item.attempts++;
+          if (item.attempts < this.maxAttempts) {
+            await new Promise(resolve => setTimeout(resolve, Math.min(30_000, 500 * 2 ** (item.attempts - 1))));
+            this.queue.unshift(item); // Keep writes in chronological order.
+          } else {
+            console.error("Queue task permanently failed after bounded retries:", error, item.task);
+          }
+        }
+        await new Promise(resolve => setTimeout(resolve, this.delayMs));
       }
-      await new Promise((r) => setTimeout(r, this.time));
+    } finally {
+      this.isProcessing = false;
+      if (this.queue.length) void this.process();
     }
-    this.isProcessing = false;
   }
 }

@@ -1,14 +1,14 @@
 {
   "compilerOptions": {
-    "target": "es2021",
+    "target": "ES2022",
     "module": "commonjs",
-    "outDir": "./dist", // Garante que a saída seja na pasta 'dist'
-    "rootDir": "./src", // Define a raiz do código fonte como 'src'
+    "outDir": "./dist",
+    "rootDir": "./src",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["src/**/*"], // Inclui apenas os arquivos da pasta 'src' no build
+  "include": ["src/**/*"],
   "exclude": ["node_modules"]
 }

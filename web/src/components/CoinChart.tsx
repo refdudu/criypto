@@ -1,145 +1,55 @@
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-  //   Brush,
-} from "recharts";
-import type {
-  Coin,
-  CoinHistoric,
-} from "../services/supabase/SupabaseCoinService";
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import classNames from "classnames";
+import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import type { Coin, CoinHistoric } from "../services/supabase/SupabaseCoinService";
+import { SupabaseCoinService } from "../services/supabase/SupabaseCoinService";
 
-interface DrawerCoinChartProps {
-  selectedCoin: Coin | null;
-  onClose: () => void;
-}
-export const DrawerCoinChart = ({
-  selectedCoin,
-  onClose,
-}: DrawerCoinChartProps) => {
-  //   if (!isVisible) return null;
-
-  const isVisible = !!selectedCoin;
+export function DrawerCoinChart({ selectedCoin, onClose }: { selectedCoin: Coin | null; onClose: () => void }) {
+  const [interval, setInterval] = useState("15m");
+  const [data, setData] = useState<CoinHistoric[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    if (!selectedCoin) return;
+    let active = true;
+    setData([]); setError(null);
+    void SupabaseCoinService.getHistory(selectedCoin.id, interval).then(rows => {
+      if (active) setData(rows);
+    }).catch((reason: unknown) => {
+      if (active) setError(reason instanceof Error ? reason.message : String(reason));
+    });
+    return () => { active = false; };
+  }, [selectedCoin?.id, interval]);
+  if (!selectedCoin) return null;
   return createPortal(
-    <div
-      className={classNames("fixed top-0 left-0 right-0 z-50 flex", {
-        "pointer-events-none": !isVisible,
-      })}
-    >
-      <button
-        type="button"
-        className={classNames(
-          "flex-1 bg-black cursor-pointer transition-opacity",
-          {
-            "opacity-40 delay-100 duration-100": isVisible,
-            "opacity-0 pointer-events-none": !isVisible,
-          }
-        )}
-        onClick={onClose}
-      />
-      <div
-        className={classNames(
-          "w-full flex items-center justify-center max-w-[50%] h-screen bg-gray-800 p-4 transition duration-100",
-          {
-            "opacity-100 translate-x-0": isVisible,
-            "opacity-0 pointer-events-none translate-x-full": !isVisible,
-          }
-        )}
-      >
-        {isVisible && <DrawerContent selectedCoin={selectedCoin} />}
+    <div role="dialog" aria-modal="true" aria-label={`Gráfico ${selectedCoin.id}`}
+      className="fixed inset-0 z-50 flex justify-end bg-black/70">
+      <div className="w-full max-w-3xl h-full overflow-y-auto bg-gray-800 p-5">
+        <div className="flex justify-between items-center gap-3 mb-5">
+          <h2 className="font-semibold text-xl">{selectedCoin.id}</h2>
+          <button type="button" onClick={onClose} className="px-3 py-2 rounded bg-gray-700">Fechar</button>
+        </div>
+        <label className="block mb-5">Intervalo
+          <select value={interval} onChange={event => setInterval(event.target.value)}
+            className="block mt-2 rounded bg-gray-700 p-2">
+            {["5m", "15m", "1h"].map(value => <option key={value} value={value}>{value}</option>)}
+          </select>
+        </label>
+        {error && <p role="alert" className="text-red-300 mb-4">{error}</p>}
+        {data.length ? <CoinChart data={data} /> : <p className="text-gray-400">Sem dados históricos disponíveis.</p>}
       </div>
-    </div>,
-    document.body
+    </div>, document.body
   );
-};
-
-const DrawerContent = ({ selectedCoin }: { selectedCoin: Coin }) => {
-  //   useEffect(() => {
-  //     console.log("DrawerContent mounted");
-  //     return () => {
-  //       console.log("DrawerContent unmounted");
-  //       // Cleanup logic if needed
-  //     };
-  //   }, []);
-
-  return (
-    <div className="w-full h-full flex-col flex ">
-      <span>{selectedCoin.id}</span>
-      <CoinChart data={[]} />
-    </div>
-  );
-};
-
-export const CoinChart = ({ data }: { data: CoinHistoric[] }) => {
-  // Calculate min and max values for Y-axis domain
-  const prices = data.reduce((acc, cur) => {
-    acc.push(cur.highPrice);
-    acc.push(cur.lowPrice);
-    return acc;
-  }, [] as number[]);
-
-  const yMin = Math.min(...prices);
-  const yMax = Math.max(...prices);
-  const padding = (yMax - yMin) * 0.1; // 10% padding
-
-  return (
-    <ResponsiveContainer width="100%" height={400}>
-      <LineChart
-        data={data}
-        margin={{
-          top: 5,
-          right: 30,
-          left: 20,
-          bottom: 5,
-        }}
-      >
-        {/* Grade de fundo */}
-        <CartesianGrid strokeDasharray="3 3" />
-
-        {/* Eixo X (horizontal) - usa a chave 'timestamp' dos dados */}
-        <XAxis dataKey="timestamp" />
-
-        {/* Eixo Y (vertical) */}
-        {/* <YAxis /> */}
-        <YAxis domain={[yMin - padding, yMax + padding]} />
-
-        {/* Tooltip (dica) que aparece ao passar o mouse */}
-        <Tooltip
-          content={({ payload }) => {
-            if (!payload?.[0]?.payload) return <></>;
-            const { timestamp, highPrice, closePrice, lowPrice, rsiValue } =
-              payload?.[0]?.payload;
-            return (
-              <div className="p-2 bg-gray-800 rounded flex flex-col">
-                <span>Data: {timestamp}</span>
-                <span>Máximo: {highPrice}</span>
-                <span>Mínimo: {lowPrice}</span>
-                <span>Fechamento: {closePrice}</span>
-                <span>RSI: {rsiValue}</span>
-              </div>
-            );
-          }}
-        />
-
-        {/* Legenda do gráfico */}
-        <Legend />
-
-        {/* A primeira linha do gráfico - usa a chave 'highPrice' dos dados */}
-        <Line
-          type="monotone"
-          dataKey="closePrice"
-          stroke="#8884d8"
-          activeDot={{ r: 8 }}
-          dot={false}
-        />
-      </LineChart>
-    </ResponsiveContainer>
-  );
-};
+}
+export function CoinChart({ data }: { data: CoinHistoric[] }) {
+  return <ResponsiveContainer width="100%" height={400}>
+    <LineChart data={data} margin={{ top: 10, right: 25, left: 5, bottom: 5 }}>
+      <CartesianGrid strokeDasharray="3 3" />
+      <XAxis dataKey="timestamp" tickFormatter={value => new Date(value).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })} />
+      <YAxis domain={["auto", "auto"]} />
+      <Tooltip labelFormatter={value => new Date(String(value)).toLocaleString("pt-BR")} />
+      <Legend />
+      <Line type="monotone" dataKey="closePrice" name="Fechamento" stroke="#8884d8" dot={false} />
+      <Line type="monotone" dataKey="emaValue" name="EMA21" stroke="#82ca9d" dot={false} />
+    </LineChart>
+  </ResponsiveContainer>;
+}

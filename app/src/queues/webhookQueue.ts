@@ -1,55 +1,19 @@
 import { CoinMap } from "../coinMap";
 import { QueueManager } from "./QueueManager";
 import { webhookList } from "../webhook";
-
-// const webhookQueue: Array<{
-
-const intervals = ["15m", "1h", "4h"];
-
-interface EnqueueWebhookParams {
-  eventSymbol: string;
-  rsi: number | null;
-  ema: number | null;
-  date: number;
-  interval: string;
+interface Task {
+  eventSymbol: string; interval: string; date: number; direction: "BULLISH" | "BEARISH";
+  confirmationPrice: number; rsi: number | null; ema: number | null;
+  atr: number | null; relativeVolume: number | null;
 }
-
-const sendWebhook = async ({
-  ema: currentEMA,
-  eventSymbol,
-  date: eventTime,
-  interval,
-  rsi,
-}: EnqueueWebhookParams) => {
-  if (!intervals.includes(interval)) return;
-  if (!rsi || (rsi >= 30 && rsi <= 70)) return;
-
-  //   console.log("Verificando se deve enviar alerta", eventSymbol, interval);
-  const f = (id: string) =>
-    webhookList({
-      id,
-      rsi,
-      ema: currentEMA,
-      date: new Date(eventTime),
-      interval: interval,
-    });
-
-  try {
-    // const isSended = await SupabaseCoinRepository.checkRecentRsiAlerts(
-    //   eventSymbol,
-    //   interval
-    // );
-
-    // console.log("Item do alerta", Boolean(isSended));
-    // if (isSended) return;
-
-    console.log("Enviando alerta", eventSymbol, interval);
-    const id = CoinMap[eventSymbol];
-    if (!id) return;
-    await f(id);
-  } catch {
-    const id = CoinMap[eventSymbol];
-    await f(id);
-  }
-};
-export const webhookQueue = new QueueManager(sendWebhook, 1000);
+export const webhookQueue = new QueueManager<Task>(async event => {
+  await webhookList({
+    id: CoinMap[event.eventSymbol] ?? event.eventSymbol.toLowerCase(),
+    symbol: event.eventSymbol, type: "DIVERGENCE_CONFIRMED",
+    direction: event.direction, confirmationPrice: event.confirmationPrice,
+    rsi: event.rsi, ema: event.ema, atr: event.atr,
+    relativeVolume: event.relativeVolume, date: new Date(event.date).toISOString(),
+    interval: event.interval,
+    eventId: `${event.eventSymbol}:${event.interval}:${event.direction}:${event.date}`
+  });
+}, 1000);

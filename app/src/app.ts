@@ -1,502 +1,207 @@
 import Binance from "node-binance-api";
 import express from "express";
-import {
-  BinanceDailyStat,
-  HistoricalKlineData,
-  KlineEvent,
-} from "./interfaces";
-
 import "dotenv/config";
-
-import {
-  DataSymbolsState,
-  SupabaseCoinRepository,
-} from "./supabase/SupabaseCoinRepository";
-
+import { BinanceDailyStat, HistoricalKlineData, KlineEvent } from "./interfaces";
+import { enrichHistory, HISTORY_LIMIT, intervalMilliseconds, normalizeHistory } from "./indicators";
+import { analyzeStrategy } from "./strategy";
+import { SupabaseCoinRepository } from "./supabase/SupabaseCoinRepository";
 import { saveKlineQueue } from "./queues/saveKlineQueue";
-import { webhookQueue } from "./queues/webhookQueue";
 import { updateIndicatorQueue } from "./queues/updateIndicatorQueue";
+import { webhookQueue } from "./queues/webhookQueue";
 
 export const config = {
   dynamicSymbols: {
-    enabled: true,
-    // topNGainers: 100,
+    enabled: process.env.DYNAMIC_SYMBOLS !== "false",
     quoteAsset: "USDT",
-    minVolume24h: 1_000_000, // 1 milhão em volume de USDT
-    fallbackSymbols: ["BTCUSDT", "ETHUSDT"], // Símbolos para monitorar se a busca dinâmica estiver desabilitada
+    minVolume24h: 1_000_000,
+    maxSymbols: 20,
+    fallbackSymbols: ["BTCUSDT", "ETHUSDT"],
+    ignoredSymbols: ["OMUSDT"]
   },
-  //   intervals: ["5m", "15m", "1h", "4h"],
   intervals: ["5m", "15m", "1h"],
-  emaPeriod: 21,
-  rsiPeriod: 14,
-  historyFetchLimit: 200,
+  historyFetchLimit: HISTORY_LIMIT,
+  alertIntervals: ["15m", "1h"]
 };
+type MarketState = Record<string, Record<string, HistoricalKlineData[]>>;
+const histories: MarketState = {};
+const streamLocks = new Map<string, Promise<void>>();
+const bootstrapped = new Set<string>();
 
-// --- Estado em Memória para os Indicadores ---
-// Mantém os valores necessários para o cálculo contínuo (suavizado) do RSI
-let indicatorStates: DataSymbolsState = {};
-
-// --- Função para Buscar Top Gainers (Mantida) ---
-
-const coinIgnore = ["OMUSDT"];
-
-async function getTopGainersFromBinance(
-  binance: Binance,
-  //   topN: number,
-  quoteAsset: string,
-  minVolume: number
-): Promise<string[]> {
-  try {
-    const tickersResponse = await binance.prevDay(); // false para todos os símbolos
-
-    const tickersArray: BinanceDailyStat[] = Array.isArray(tickersResponse)
-      ? tickersResponse
-      : [];
-
-    const filteredAndSorted = tickersArray
-      .filter(
-        (ticker) =>
-          ticker.symbol.endsWith(quoteAsset) &&
-          parseFloat(ticker.quoteVolume) > minVolume &&
-          !coinIgnore.includes(ticker.symbol)
-      )
-      .map((ticker) => ({
-        symbol: ticker.symbol,
-        priceChangePercent: parseFloat(ticker.priceChangePercent),
-      }))
-      .sort((a, b) => b.priceChangePercent - a.priceChangePercent);
-
-    const topGainers = filteredAndSorted.map((t) => t.symbol);
-    console.log(topGainers);
-    //
-
-    if (topGainers.length === 0) {
-      console.warn(
-        `Nenhum gainer encontrado com os critérios. Usando fallback: ${config.dynamicSymbols.fallbackSymbols.join(
-          ", "
-        )}`
-      );
-      return config.dynamicSymbols.fallbackSymbols;
+function candle(row: unknown[]): HistoricalKlineData {
+  if (!Array.isArray(row) || row.length < 7) throw new Error("Invalid Binance candle");
+  return {
+    timestamp: new Date(Number(row[0])).toISOString(),
+    openPrice: Number(row[1]), highPrice: Number(row[2]), lowPrice: Number(row[3]),
+    closePrice: Number(row[4]), volume: Number(row[5]),
+    emaValue: null, rsiValue: null
+  };
+}
+async function fetchBinanceKlines(symbol: string, interval: string, options: {
+  limit?: number; startTime?: number; endTime?: number
+} = {}): Promise<HistoricalKlineData[]> {
+  const url = new URL("/api/v3/klines", process.env.BINANCE_REST_URL || "https://api.binance.com");
+  url.searchParams.set("symbol", symbol);
+  url.searchParams.set("interval", interval);
+  url.searchParams.set("limit", String(options.limit ?? HISTORY_LIMIT));
+  if (options.startTime != null) url.searchParams.set("startTime", String(options.startTime));
+  if (options.endTime != null) url.searchParams.set("endTime", String(options.endTime));
+  const response = await fetch(url, { signal: AbortSignal.timeout(15_000) });
+  if (!response.ok) throw new Error(`Binance historical request failed: HTTP ${response.status}`);
+  const payload: unknown = await response.json();
+  if (!Array.isArray(payload)) throw new Error("Binance historical response is not an array");
+  return normalizeHistory(payload.filter((item): item is unknown[] => Array.isArray(item) &&
+    Number(item[6]) < Date.now()).map(candle), options.limit ?? HISTORY_LIMIT);
+}
+function reconcile(symbol: string, interval: string, rows: HistoricalKlineData[]) {
+  histories[symbol] ??= {};
+  const history = enrichHistory(rows);
+  histories[symbol][interval] = history;
+  const snapshot = analyzeStrategy(history, interval);
+  updateIndicatorQueue.enqueue({
+    eventSymbol: symbol, interval, tfState: {
+      lastHigh: snapshot.lastHigh, lastLow: snapshot.lastLow,
+      armedDivergence: snapshot.armedDivergence
     }
-
-    return topGainers;
+  });
+  bootstrapped.add(`${symbol}@${interval}`);
+}
+async function bootstrap(symbol: string, interval: string): Promise<void> {
+  try {
+    const data = await fetchBinanceKlines(symbol, interval);
+    if (data.length < 30) throw new Error("Insufficient closed candles from Binance");
+    reconcile(symbol, interval, data);
   } catch (error) {
-    console.error("Erro ao buscar top gainers:", error);
-    return config.dynamicSymbols.fallbackSymbols;
+    console.warn(`Binance bootstrap failed for ${symbol}@${interval}, trying saved history:`, error);
+    const fallback = await SupabaseCoinRepository.getHistory(symbol, interval, HISTORY_LIMIT);
+    if (fallback.length < 30) throw new Error(`No usable history for ${symbol}@${interval}`);
+    const spacing = intervalMilliseconds(interval);
+    const latest = Date.parse(fallback[fallback.length - 1].timestamp);
+    if (Date.now() - latest > spacing * 2) throw new Error(`Saved history stale for ${symbol}@${interval}`);
+    reconcile(symbol, interval, fallback);
   }
 }
-
-const server = () => {
-  const app = express();
-  app.use(express.json());
-
-  //   app.get("/:symbol", async (req, res) => {
-  //     const { symbol } = req.params;
-  //     // await lucaWebhook({
-  //     //   id: symbol,
-  //     //   rsi: 28,
-  //     //   ema: 200,
-  //     //   date: new Date(),
-  //     //   interval: "1h",
-  //     // });
-  //     res.status(200).send(indicatorStates);
-  //   });
-  app.get("/", async (req, res) => {
-    const data = Object.entries(indicatorStates)
-      .map(([symbol, intervals]) => ({
-        symbol,
-        intervals: Object.keys(intervals),
-      }))
-      .flatMap(({ intervals, symbol }) =>
-        intervals.map((interval) => ({
-          symbol,
-          interval,
-        }))
-      );
-    const promises = data.map(async (x) => {
-      const data = await SupabaseCoinRepository.checkRecentRsiAlerts(
-        x.symbol,
-        x.interval
-      ).catch(console.error);
-      return { ...data, x };
-    });
-    const _data = [];
-    for (const promise of promises) {
-      _data.push(await promise);
+function processClosedCandle(symbol: string, interval: string, next: HistoricalKlineData, notify: boolean) {
+  const previous = histories[symbol]?.[interval] ?? [];
+  const last = previous.at(-1);
+  const timestamp = Date.parse(next.timestamp);
+  if (last && timestamp <= Date.parse(last.timestamp)) return; // Closed event duplicate/out of order.
+  const history = enrichHistory([...previous, next]);
+  const current = history.at(-1)!;
+  const snapshot = analyzeStrategy(history, interval);
+  histories[symbol][interval] = history;
+  saveKlineQueue.enqueue({ eventSymbol: symbol, interval, newKlineData: current });
+  updateIndicatorQueue.enqueue({ eventSymbol: symbol, interval, tfState: {
+    lastHigh: snapshot.lastHigh, lastLow: snapshot.lastLow,
+    armedDivergence: snapshot.armedDivergence
+  } });
+  if (notify && config.alertIntervals.includes(interval)) {
+    for (const event of snapshot.events) {
+      if (event.type !== "CONFIRMED" || event.timestamp !== timestamp) continue;
+      webhookQueue.enqueue({
+        eventSymbol: symbol, interval, rsi: current.rsiValue, ema: current.emaValue,
+        atr: current.atrValue ?? null, relativeVolume: current.relativeVolume ?? null,
+        date: timestamp, direction: event.direction, confirmationPrice: event.confirmationPrice
+      });
     }
-    res.status(200).send(_data);
-  });
-  //   app.post("/:symbol", async (req, res) => {
-  //     const { symbol } = req.params;
-  //     const { rsiValue, emaValue, interval } = req.body;
-  //     try {
-  //       await sendWebhook(
-  //         symbol,
-  //         rsiValue || null,
-  //         emaValue || null,
-  //         Date.now(),
-  //         interval
-  //       );
-  //       res.status(200).send("ok");
-  //     } catch (e) {
-  //       console.error("Erro ao enviar webhook:", e);
-  //       res.status(500).send("Erro interno");
-  //     }
-  //   });
-
-  const port = process.env.API_PORT || 3000;
-  const listener = app.listen(port, () => console.log(listener.address()));
-};
-
-const binanceStart = async () => {
-  const binance = new Binance({
-    APIKEY: process.env.BINANCE_API_KEY,
-    APISECRET: process.env.BINANCE_API_SECRET,
-    reconnect: true,
-  });
-
-  const symbolsToMonitor = await getTopGainersFromBinance(
-    binance,
-    config.dynamicSymbols.quoteAsset,
-    config.dynamicSymbols.minVolume24h
-  );
-
-  if (!symbolsToMonitor || symbolsToMonitor.length === 0) {
-    console.error("ERRO CRÍTICO: Nenhum símbolo para monitorar. Encerrando.");
-    return;
   }
-
-  indicatorStates = await SupabaseCoinRepository.loadInitialStateForAllSymbols(
-    symbolsToMonitor,
-    config.intervals,
-    config.historyFetchLimit
-  );
-  //   return;
-
-  const streams = symbolsToMonitor.flatMap((symbol) =>
-    config.intervals.map(
-      (interval) => `${symbol.toLowerCase()}@kline_${interval}`
-    )
-  );
-
-  streams.forEach(async (stream, index) => {
-    const callback = (klineEventData: KlineEvent) => {
-      if (symbolsToMonitor.includes(klineEventData.s)) {
-        handleKlineData(klineEventData).catch((e) =>
-          console.error(
-            `Erro em handleKlineData [${klineEventData.s}@${klineEventData.k.i}]:`,
-            e
-          )
-        );
+}
+async function handleKlineData(payload: KlineEvent): Promise<void> {
+  if (!payload.k.x || !config.intervals.includes(payload.k.i)) return;
+  const symbol = payload.s;
+  const interval = payload.k.i;
+  const key = `${symbol}@${interval}`;
+  if (!bootstrapped.has(key)) return;
+  const next: HistoricalKlineData = {
+    timestamp: new Date(payload.k.t).toISOString(),
+    openPrice: Number(payload.k.o), highPrice: Number(payload.k.h),
+    lowPrice: Number(payload.k.l), closePrice: Number(payload.k.c),
+    volume: Number(payload.k.v), emaValue: null, rsiValue: null
+  };
+  const last = histories[symbol][interval].at(-1);
+  const step = intervalMilliseconds(interval);
+  if (last) {
+    const lastTime = Date.parse(last.timestamp);
+    if (payload.k.t <= lastTime) return;
+    const missing = Math.round((payload.k.t - lastTime) / step) - 1;
+    if (missing > 0) {
+      if (missing > 999) {
+        await bootstrap(symbol, interval); // Safely resynchronize without historical notifications.
+      } else {
+        const backfill = await fetchBinanceKlines(symbol, interval, {
+          startTime: lastTime + step, endTime: payload.k.t - 1, limit: 1000
+        });
+        if (backfill.length !== missing || backfill.some((row, index) =>
+          Date.parse(row.timestamp) !== lastTime + step * (index + 1))) {
+          await bootstrap(symbol, interval);
+        } else {
+          for (const row of backfill) processClosedCandle(symbol, interval, row, false);
+        }
       }
+    }
+  }
+  // A resynchronization can already include this candle.
+  processClosedCandle(symbol, interval, next, true);
+}
+async function monitor() {
+  const binance = new Binance({
+    APIKEY: process.env.BINANCE_API_KEY, APISECRET: process.env.BINANCE_API_SECRET, reconnect: true
+  });
+  let symbols = config.dynamicSymbols.fallbackSymbols;
+  if (config.dynamicSymbols.enabled) {
+    try {
+      const response = await binance.prevDay();
+      const tickers: BinanceDailyStat[] = Array.isArray(response) ? response : [];
+      const selected = tickers.filter(t => t.symbol.endsWith(config.dynamicSymbols.quoteAsset) &&
+        !config.dynamicSymbols.ignoredSymbols.includes(t.symbol) &&
+        Number.isFinite(Number(t.quoteVolume)) &&
+        Number(t.quoteVolume) >= config.dynamicSymbols.minVolume24h)
+        .sort((a, b) => Number(b.quoteVolume) - Number(a.quoteVolume))
+        .slice(0, config.dynamicSymbols.maxSymbols).map(t => t.symbol);
+      if (selected.length) symbols = selected;
+    } catch (error) {
+      console.error("Cannot select Binance symbols, using fallback", error);
+    }
+  }
+  for (const symbol of symbols) {
+    for (const interval of config.intervals) {
+      try {
+        await bootstrap(symbol, interval);
+      } catch (error) {
+        console.error(`Skipping ${symbol}@${interval}:`, error);
+      }
+    }
+  }
+  if (!bootstrapped.size) throw new Error("No symbol could be initialized");
+  for (const key of bootstrapped) {
+    const [symbol, interval] = key.split("@");
+    const stream = `${symbol.toLowerCase()}@kline_${interval}`;
+    const callback = (payload: KlineEvent) => {
+      if (payload.s !== symbol || payload.k.i !== interval || !payload.k.x) return;
+      const previous = streamLocks.get(key) ?? Promise.resolve();
+      const next = previous.then(() => handleKlineData(payload)).catch(error => {
+        console.error(`Market stream processing failed for ${key}:`, error);
+      });
+      streamLocks.set(key, next);
     };
-    await new Promise((resolve) => setTimeout(() => resolve(true), 50 * index));
-    console.log(`${stream} iniciado.`);
-    const listen = (tries: number) => {
-      if (tries > 10) {
-        console.error(`Falha ao conectar ao WebSocket após várias tentativas.`);
+    const subscribe = (attempt: number) => {
+      if (attempt > 10) {
+        console.error(`WebSocket retries exhausted: ${key}`);
         return;
       }
-      binance.websockets.subscribe(
-        stream,
-        callback,
-        () => listen(tries + 1),
-        () => true
-      );
+      binance.websockets.subscribe(stream, callback, () => subscribe(attempt + 1), () => true);
     };
-    listen(0);
-  });
-
-  //   binance.websockets.prevDay(
-  //     symbolsToMonitor,
-  //     async (_error: any, data: BinancePrevDayResponse) => {
-  //       //   if (parseFloat(data.quoteVolume) < 10000000) return;
-  //       const percent = parseFloat(data.percentChange);
-  //       if (percent < 20) return;
-  //       // cria registro de variação maior de 20% para caso um RSI menor que 30 nos intervalos de 5m, 15m e 1h aparecer
-  //       // se ja tiver registro da moeda deve ignorar
-
-  //       try {
-  //         const isObservable = await SupabaseCoinRepository.getSymbolObserve(
-  //           data.symbol
-  //         );
-  //         if (isObservable) return;
-  //         await SupabaseCoinRepository.createSymbolObserve(data.symbol);
-  //         console.log(data.percentChange, data.symbol);
-  //       } catch (e) {
-  //         console.log(e);
-  //       }
-  //     }
-  //   );
-};
-
-const main = async () => {
-  server();
-  binanceStart();
-};
-
-// --- FUNÇÃO PRINCIPAL MODIFICADA ---
-const handleKlineData = async (klinePayload: KlineEvent): Promise<void> => {
-  const { s: eventSymbol, k: kline, E: eventTime } = klinePayload;
-  if (!kline.x) return; // Processar apenas em velas fechadas
-
-  const interval = kline.i;
-  const closePrice = parseFloat(kline.c);
-  const highPrice = parseFloat(kline.h);
-  const lowPrice = parseFloat(kline.l);
-  const klineTimestamp = kline.t;
-
-  if (!indicatorStates[eventSymbol]?.[interval]) {
-    console.warn(
-      `Estado para ${eventSymbol}@${interval} não foi pré-carregado. Ignorando.`
-    );
-    return;
+    subscribe(0);
   }
-
-  const tfState = indicatorStates[eventSymbol][interval];
-  let stateChanged = false;
-
-  // 1. ATUALIZAR HISTÓRICO E CALCULAR INDICADORES
-  const newKlineData: HistoricalKlineData = {
-    closePrice,
-    openPrice: parseFloat(kline.o),
-    highPrice,
-    lowPrice,
-    timestamp: new Date(klineTimestamp).toISOString(),
-    emaValue: null,
-    rsiValue: null,
-  };
-  tfState.klineHistory = tfState.klineHistory || [];
-  tfState.klineHistory.push(newKlineData);
-  if (tfState.klineHistory.length > config.historyFetchLimit) {
-    tfState.klineHistory.shift();
-  }
-
-  // --- Cálculo de EMA ---
-  const closePrices = tfState.klineHistory.map((k) => k.closePrice);
-  const emaPeriod = config.emaPeriod;
-  let currentEMA = closePrices[closePrices.length - 1];
-  if (closePrices.length >= emaPeriod) {
-    if (!tfState.emaHistory || tfState.emaHistory.length === 0) {
-      // Primeira média: média simples
-      const sma =
-        closePrices.slice(-emaPeriod).reduce((a, b) => a + b, 0) / emaPeriod;
-      currentEMA = sma;
-    } else {
-      const multiplier = 2 / (emaPeriod + 1);
-      currentEMA =
-        (closePrices[closePrices.length - 1] -
-          tfState.emaHistory[tfState.emaHistory.length - 1]) *
-          multiplier +
-        tfState.emaHistory[tfState.emaHistory.length - 1];
-    }
-    tfState.emaHistory = tfState.emaHistory || [];
-    tfState.emaHistory.push(currentEMA);
-    if (tfState.emaHistory.length > config.historyFetchLimit)
-      tfState.emaHistory.shift();
-  }
-  tfState.emaValue = currentEMA;
-  newKlineData.emaValue = currentEMA;
-
-  // --- Cálculo de RSI ---
-  const rsiPeriod = config.rsiPeriod;
-  if (closePrices.length > rsiPeriod) {
-    const priceChanges = closePrices
-      .slice(-rsiPeriod - 1)
-      .map((v, i, arr) => (i === 0 ? 0 : v - arr[i - 1]))
-      .slice(1);
-    const gains = priceChanges.map((c) => (c > 0 ? c : 0));
-    const losses = priceChanges.map((c) => (c < 0 ? Math.abs(c) : 0));
-    let avgGain, avgLoss;
-    if (
-      tfState.previousAverageGain == null ||
-      tfState.previousAverageLoss == null
-    ) {
-      avgGain = gains.reduce((a, b) => a + b, 0) / rsiPeriod;
-      avgLoss = losses.reduce((a, b) => a + b, 0) / rsiPeriod;
-    } else {
-      avgGain =
-        (tfState.previousAverageGain * (rsiPeriod - 1) +
-          gains[gains.length - 1]) /
-        rsiPeriod;
-      avgLoss =
-        (tfState.previousAverageLoss * (rsiPeriod - 1) +
-          losses[losses.length - 1]) /
-        rsiPeriod;
-    }
-    tfState.previousAverageGain = avgGain;
-    tfState.previousAverageLoss = avgLoss;
-    let rsi = 100;
-    if (avgLoss !== 0) {
-      const rs = avgGain / avgLoss;
-      rsi = 100 - 100 / (1 + rs);
-    }
-    tfState.rsiValue = rsi;
-    newKlineData.rsiValue = rsi;
-  }
-  const sendLucaWebhook = async () => {
-    if (interval !== "1h" || !tfState.rsiValue || tfState.rsiValue > 30) return;
-
-    const historicData = await SupabaseCoinRepository.getCoinHistoric(
-      eventSymbol,
-      interval
-    );
-    const hasIntervals = historicData.length === 4;
-    if (!hasIntervals) return;
-
-    // const last4 = [...historicData.slice(4)];
-    if (historicData.every((data) => (data?.rsi_value || 0) < 30)) return;
-    
-
-    
-    // const lastRsi = historicData[historicData.length - 1].rsi_value;
-    // if (!lastRsi || lastRsi < 30) return;
-
-    webhookQueue.enqueue({
-      eventSymbol,
-      rsi: tfState.rsiValue,
-      ema: tfState.emaValue,
-      date: eventTime,
-      interval,
-    });
-  };
-  // validar se o rsi da ultima hora era menor que 30 tmb
-
-  saveKlineQueue.enqueue({ eventSymbol, interval, newKlineData });
-  if (!tfState.rsiValue) return; // Precisa de RSI para continuar
-
-  // 2. LÓGICA DE CONFIRMAÇÃO DE DIVERGÊNCIA ARMADA
-  if (tfState.armedDivergence) {
-    const { type, confirmationPrice, armedAtTimestamp } =
-      tfState.armedDivergence;
-    const intervalMs =
-      parseInt(interval.slice(0, -1)) *
-      (interval.endsWith("m") ? 60 : 3600) *
-      1000;
-    if (klineTimestamp - armedAtTimestamp > 14 * intervalMs) {
-      console.log(
-        `[INFO] Divergência ${type} para ${eventSymbol}@${interval} expirou. Sinal cancelado.`
-      );
-      tfState.armedDivergence = null;
-      stateChanged = true;
-    } else {
-      const enqueueWebhook = () => {
-        if (interval !== "5m")
-          webhookQueue.enqueue({
-            eventSymbol,
-            rsi: tfState.rsiValue,
-            ema: tfState.emaValue,
-            date: eventTime,
-            interval,
-          });
-      };
-
-      if (type === "BULLISH" && highPrice > confirmationPrice) {
-        console.log(
-          `%c[ALERTA CONFIRMADO] DIVERGÊNCIA DE ALTA para ${eventSymbol}@${interval}! Preço rompeu ${confirmationPrice}`,
-          "color: green; font-weight: bold;"
-        );
-
-        // enqueueWebhook();
-
-        tfState.armedDivergence = null;
-        tfState.lastLow = null;
-        stateChanged = true;
-      } else if (type === "BEARISH" && lowPrice < confirmationPrice) {
-        console.log(
-          `%c[ALERTA CONFIRMADO] DIVERGÊNCIA DE BAIXA para ${eventSymbol}@${interval}! Preço rompeu ${confirmationPrice}`,
-          "color: red; font-weight: bold;"
-        );
-        // enqueueWebhook();
-
-        tfState.armedDivergence = null;
-        tfState.lastHigh = null;
-        stateChanged = true;
-      }
-    }
-  }
-
-  // 3. LÓGICA DE DETECÇÃO E ARME DE NOVAS DIVERGÊNCIAS
-  if (!tfState.armedDivergence) {
-    // DIVERGÊNCIA DE BAIXA
-    if (tfState.rsiValue > 70) {
-      if (
-        tfState.lastHigh &&
-        highPrice > tfState.lastHigh.price &&
-        tfState.rsiValue < tfState.lastHigh.rsi
-      ) {
-        const historySlice = tfState.klineHistory.filter(
-          (k) => new Date(k.timestamp).getTime() > tfState.lastHigh!.timestamp
-        );
-        const confirmationPrice = Math.min(
-          ...historySlice.map((k) => k.lowPrice)
-        );
-        console.log(
-          `%c[SINAL ARMADO] Potencial Divergência de BAIXA para ${eventSymbol}@${interval}. Aguardando quebra de ${confirmationPrice}`,
-          "color: orange;"
-        );
-        tfState.armedDivergence = {
-          type: "BEARISH",
-          confirmationPrice,
-          armedAtTimestamp: klineTimestamp,
-        };
-        stateChanged = true;
-      }
-      if (!tfState.lastHigh || tfState.rsiValue > tfState.lastHigh.rsi) {
-        tfState.lastHigh = {
-          price: highPrice,
-          rsi: tfState.rsiValue,
-          timestamp: klineTimestamp,
-        };
-        stateChanged = true;
-      }
-    }
-    // DIVERGÊNCIA DE ALTA
-    if (tfState.rsiValue < 30) {
-      if (
-        tfState.lastLow &&
-        lowPrice < tfState.lastLow.price &&
-        tfState.rsiValue > tfState.lastLow.rsi
-      ) {
-        const historySlice = tfState.klineHistory.filter(
-          (k) => new Date(k.timestamp).getTime() > tfState.lastLow!.timestamp
-        );
-        const confirmationPrice = Math.max(
-          ...historySlice.map((k) => k.highPrice)
-        );
-        console.log(
-          `%c[SINAL ARMADO] Potencial Divergência de ALTA para ${eventSymbol}@${interval}. Aguardando quebra de ${confirmationPrice}`,
-          "color: cyan;"
-        );
-        tfState.armedDivergence = {
-          type: "BULLISH",
-          confirmationPrice,
-          armedAtTimestamp: klineTimestamp,
-        };
-        stateChanged = true;
-      }
-      if (!tfState.lastLow || tfState.rsiValue < tfState.lastLow.rsi) {
-        tfState.lastLow = {
-          price: lowPrice,
-          rsi: tfState.rsiValue,
-          timestamp: klineTimestamp,
-        };
-        stateChanged = true;
-      }
-    }
-  }
-
-  // 4. PERSISTIR O ESTADO SE HOUVE MUDANÇA
-  if (stateChanged) {
-    updateIndicatorQueue.enqueue({
-      eventSymbol,
-      interval,
-      tfState,
-    });
-  }
-};
-
-main().catch((error) => {
-  console.error("Erro fatal na aplicação:", error);
-  process.exit(1);
-});
+  console.info(`Monitoring ${bootstrapped.size} symbol/interval streams.`);
+}
+async function main() {
+  await monitor();
+  const app = express();
+  app.get("/", (_request, response) => response.json({
+    status: "running", monitoredStreams: bootstrapped.size,
+    strategy: "confirmed-pivot-divergence", execution: "signals-only"
+  }));
+  const port = Number(process.env.API_PORT || 3000);
+  app.listen(port, () => console.info(`Criypto API listening on ${port}`));
+}
+main().catch(error => { console.error("Startup failed:", error); process.exitCode = 1; });
