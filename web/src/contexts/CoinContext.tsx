@@ -29,7 +29,7 @@ export function CoinProvider({children}:{children:React.ReactNode}){
     const notify=()=>{if(delayed)clearTimeout(delayed);delayed=setTimeout(refresh,750);};
     const channel=SupabaseCoinService.watch(notify);
     const timer=setInterval(refresh,60000);
-    return ()=>{active.current=false;sequence.current++;clearInterval(timer);
+    return ()=>{active.current=false;clearInterval(timer);
       if(delayed)clearTimeout(delayed);void channel.unsubscribe();};
   },[refresh]);
   return <CoinContext.Provider value={{coins,rsiHistoric,setSelectedCoin,indicatorStates,error,loading,refresh,revision}}>
