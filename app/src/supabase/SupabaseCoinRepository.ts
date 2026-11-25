@@ -15,9 +15,10 @@ function mapCandle(symbol:string,interval:string,c:HistoricalKlineData) {
     ema_value:c.emaValue,rsi_value:c.rsiValue,atr_value:c.atrValue??null,
     relative_volume:c.relativeVolume??null};
 }
-async function getHistory(symbol:string,interval:string,limit:number):Promise<HistoricalKlineData[]>{
-  const {data,error}=await supabase.from("market_data").select("*").eq("symbol",symbol).eq("interval",interval)
-    .order("timestamp",{ascending:false}).limit(limit);
+async function getHistory(symbol:string,interval:string,limit:number,through?:string):Promise<HistoricalKlineData[]>{
+  let query=supabase.from("market_data").select("*").eq("symbol",symbol).eq("interval",interval);
+  if(through)query=query.lte("timestamp",through);
+  const {data,error}=await query.order("timestamp",{ascending:false}).limit(limit);
   if(error)throw error;
   return normalizeHistory((data??[]).map(r=>({
     timestamp:r.timestamp,openPrice:Number(r.open_price),highPrice:Number(r.high_price),
@@ -33,15 +34,18 @@ async function getSavedSnapshot(symbol:string,interval:string):Promise<StoredSna
   const {data,error}=await supabase.from("indicator_states").select("*")
     .eq("symbol",symbol).eq("interval",interval).maybeSingle();
   if(error)throw error;
-  if(!data?.calc_state || !data.market_timestamp)return null;
+  if(!data?.market_timestamp)return null;
+  if(!data.calc_state || !Number.isFinite(Date.parse(data.market_timestamp)))throw new Error("Invalid stored checkpoint");
   const s=data.calc_state as IndicatorAccumulator;
   if(!Number.isInteger(s.count)||s.count<15||!Number.isFinite(s.lastClose)||!Array.isArray(s.volumes)||
     !Number.isFinite(s.ema)||!Number.isFinite(s.avgGain)||!Number.isFinite(s.avgLoss)||
-    !Number.isFinite(s.atr))return null;
+    !Number.isFinite(s.atr)||s.lastClose!<=0||s.ema!<=0||s.avgGain!<0||s.avgLoss!<0||s.atr!<0||
+    s.volumes.length>20||!s.volumes.every(v=>Number.isFinite(v)&&v>=0)||
+    ![s.emaSeed,s.gainSeed,s.lossSeed,s.trSeed].every(Number.isFinite))throw new Error("Invalid stored accumulator");
   return {timestamp:data.market_timestamp,calculator:s};
 }
 async function persistBatch(symbol:string,interval:string,rows:HistoricalKlineData[],
-  snapshot:IndicatorSnapshot,calculator:IndicatorAccumulator,event:SignalOutboxEvent|null=null):Promise<void>{
+  snapshot:IndicatorSnapshot,calculator:IndicatorAccumulator,expectedTimestamp:string|null,events:SignalOutboxEvent[]):Promise<void>{
   const newest=rows.at(-1);
   if(!newest)throw new Error("Cannot persist empty batch");
   const state={
@@ -54,8 +58,8 @@ async function persistBatch(symbol:string,interval:string,rows:HistoricalKlineDa
     armed_confirmation_price:snapshot.armedDivergence?.confirmationPrice??null,
     armed_at_timestamp:snapshot.armedDivergence?new Date(snapshot.armedDivergence.armedAtTimestamp).toISOString():null
   };
-  const {error}=await supabase.rpc("persist_market_batch",{
-    p_candles:rows.map(r=>mapCandle(symbol,interval,r)),p_state:state,p_event:event
+  const {error}=await supabase.rpc("persist_market_recovery_batch",{
+    p_candles:rows.map(r=>mapCandle(symbol,interval,r)),p_state:state,p_expected_timestamp:expectedTimestamp,p_events:events
   });
   if(error)throw error;
 }

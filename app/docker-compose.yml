@@ -23,3 +23,9 @@ services:
     # Este arquivo DEVE estar na mesma pasta que o docker-compose.yml na sua VPS
     env_file:
       - .env
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:'+(process.env.API_PORT||3000)+'/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 120s

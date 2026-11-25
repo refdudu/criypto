@@ -10,6 +10,11 @@ export async function dispatchPendingSignals():Promise<void>{
     if(!targets.length)return; // Keep events pending until destinations are configured.
     const events=await SupabaseCoinRepository.getPendingSignals();
     for(const event of events){
+      const policy=event.payload.deliveryPolicy;
+      if(policy!=null && policy!=="notify"){
+        await SupabaseCoinRepository.markDelivery(event.event_id,event.delivered_targets,true);
+        continue;
+      }
       const delivered=new Set(event.delivered_targets);
       for(const target of targets){
         if(delivered.has(target.key))continue;
